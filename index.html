@@ -1,0 +1,3415 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClinCod | Emissor de Laudo de AIH & Consulta SIGTAP</title>
+    <meta name="description" content="ClinCod — Emissor de Laudo de AIH do SUS integrado com Consulta SIGTAP. Procedimentos clínicos e cirúrgicos hospitalares para emissão ágil e sem glosas.">
+    
+    <!-- Biblioteca PDF-Lib para carimbar o formulário oficial do SUS (com fallback local offline) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+    <script>if (typeof PDFLib === 'undefined') document.write('<script src="pdf-lib.min.js"><\/script>');</script>
+    <!-- Base de Dados Local (Carregamento instantâneo sem bloqueio de navegador) -->
+    <script src="base_dados.js"></script>
+
+    <style>
+        :root {
+            --primary: #0056b3;
+            --primary-hover: #004085;
+            --primary-light: #e8f2ff;
+            --accent: #0284c7;
+            --success: #16a34a;
+            --success-bg: #dcfce7;
+            --warning: #f59e0b;
+            --danger: #dc2626;
+            --danger-bg: #fee2e2;
+            --bg-page: #f1f5f9;
+            --bg-card: #ffffff;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --border: #cbd5e1;
+            --border-focus: #0056b3;
+            --shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
+            --radius: 12px;
+        }
+
+        body.dark-mode {
+            --primary: #38bdf8;
+            --primary-hover: #7dd3fc;
+            --primary-light: #082f49;
+            --accent: #38bdf8;
+            --success: #4ade80;
+            --success-bg: #052e16;
+            --danger: #f87171;
+            --danger-bg: #450a0a;
+            --bg-page: #0f172a;
+            --bg-card: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: #334155;
+            --border-focus: #38bdf8;
+            --shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-page);
+            color: var(--text-main);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        /* --- CABEÇALHO --- */
+        .header {
+            width: 100%;
+            max-width: 720px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0 20px 0;
+            border-bottom: 2px solid var(--border);
+            margin-bottom: 25px;
+        }
+
+        .logo-box {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-title {
+            font-size: 26px;
+            font-weight: 900;
+            color: var(--primary);
+            letter-spacing: -0.5px;
+        }
+
+        .logo-subtitle {
+            font-size: 13px;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        .badge-reg {
+            background-color: var(--success-bg);
+            color: var(--success);
+            font-size: 11px;
+            font-weight: bold;
+            padding: 4px 8px;
+            border-radius: 20px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            border: 1px solid var(--success);
+        }
+
+        .btn-theme {
+            background-color: var(--bg-card);
+            color: var(--text-main);
+            border: 1px solid var(--border);
+            padding: 8px 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            transition: all 0.2s;
+        }
+
+        .btn-theme:hover {
+            border-color: var(--primary);
+            transform: translateY(-1px);
+        }
+
+        /* --- HUB DE NAVEGAÇÃO ENTRE AIH E APAC --- */
+        .hub-navegacao {
+            display: flex;
+            width: 100%;
+            max-width: 720px;
+            margin-bottom: 22px;
+            gap: 12px;
+        }
+
+        .btn-aba {
+            flex: 1;
+            padding: 13px 16px;
+            font-size: 14.5px;
+            font-weight: 700;
+            border-radius: 10px;
+            border: 2px solid var(--border);
+            background-color: var(--bg-card);
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.04);
+            user-select: none;
+        }
+
+        .btn-aba:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+            transform: translateY(-1px);
+        }
+
+        .btn-aba.ativa {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+            color: #ffffff;
+            border-color: var(--primary);
+            box-shadow: 0 4px 12px rgba(0, 86, 179, 0.25);
+        }
+
+        .btn-aba.aba-apac.ativa {
+            background: linear-gradient(135deg, #0284c7 0%, #0d9488 100%);
+            border-color: #0d9488;
+            box-shadow: 0 4px 12px rgba(13, 148, 136, 0.25);
+        }
+
+        body.dark-mode .btn-aba {
+            background-color: var(--bg-card);
+            color: var(--text-muted);
+            border-color: var(--border);
+        }
+
+        body.dark-mode .btn-aba.ativa {
+            background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+            color: #ffffff;
+            border-color: #38bdf8;
+        }
+
+        body.dark-mode .btn-aba.aba-apac.ativa {
+            background: linear-gradient(135deg, #0284c7 0%, #0d9488 100%);
+            color: #ffffff;
+            border-color: #2dd4bf;
+        }
+
+        .secao-titulo-apac {
+            color: #0284c7;
+            border-bottom-color: #e0f2fe;
+        }
+
+        body.dark-mode .secao-titulo-apac {
+            color: #38bdf8;
+            border-bottom-color: #0c2a42;
+        }
+
+        .painel-apac {
+            background: linear-gradient(180deg, #f0fdfa 0%, #e6fffa 100%);
+            border-color: #0d9488;
+        }
+
+        body.dark-mode .painel-apac {
+            background: linear-gradient(180deg, #042f2e 0%, #081a2b 100%);
+            border-color: #2dd4bf;
+        }
+
+        .painel-apac .qualcid-marca h3 {
+            color: #0f766e;
+        }
+
+        body.dark-mode .painel-apac .qualcid-marca h3 {
+            color: #2dd4bf;
+        }
+
+        .painel-apac .qualcid-busca-row input {
+            border-color: #0d9488;
+        }
+
+        .painel-apac .btn-buscar-qualcid {
+            background: #0d9488;
+        }
+
+        .painel-apac .btn-buscar-qualcid:hover {
+            background: #0f766e;
+        }
+
+        .painel-apac .qualcid-chip:hover {
+            border-color: #0d9488;
+            color: #0d9488;
+            background-color: #f0fdfa;
+        }
+
+        .qualcid-badge-02 {
+            background-color: #f3e8ff;
+            color: #7e22ce;
+            border: 1px solid #d8b4fe;
+        }
+
+        .qualcid-badge-06 {
+            background-color: #ffedd5;
+            color: #c2410c;
+            border: 1px solid #fed7aa;
+        }
+
+        .qualcid-badge-07 {
+            background-color: #fef9c3;
+            color: #a16207;
+            border: 1px solid #fef08a;
+        }
+
+        body.dark-mode .qualcid-badge-02 {
+            background-color: #3b0764;
+            color: #d8b4fe;
+            border-color: #9333ea;
+        }
+
+        .bloco-secundario {
+            background-color: var(--bg-page);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            margin-top: 14px;
+            position: relative;
+        }
+
+        .botoes-dinamicos {
+            display: flex;
+            gap: 12px;
+            margin-top: 14px;
+            margin-bottom: 20px;
+        }
+
+        .btn-secundario, .btn-remover {
+            flex: 1;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 13.5px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .btn-secundario {
+            background-color: #f0fdfa;
+            color: #0f766e;
+            border: 2px dashed #0d9488;
+        }
+
+        .btn-secundario:hover {
+            background-color: #ccfbf1;
+            transform: translateY(-1px);
+        }
+
+        .btn-remover {
+            background-color: #fff1f2;
+            color: #e11d48;
+            border: 2px dashed #f43f5e;
+        }
+
+        .btn-remover:hover {
+            background-color: #ffe4e6;
+            transform: translateY(-1px);
+        }
+
+        body.dark-mode .btn-secundario {
+            background-color: #042f2e;
+            color: #2dd4bf;
+            border-color: #2dd4bf;
+        }
+
+        body.dark-mode .btn-remover {
+            background-color: #4c0519;
+            color: #fda4af;
+            border-color: #f43f5e;
+        }
+
+        .btn-gerar-apac {
+            background: linear-gradient(135deg, #0284c7 0%, #0d9488 100%);
+            box-shadow: 0 4px 12px rgba(13, 148, 136, 0.3);
+        }
+
+        .btn-gerar-apac:hover {
+            box-shadow: 0 6px 16px rgba(13, 148, 136, 0.4);
+        }
+
+        /* --- FORMULÁRIO PRINCIPAL --- */
+        form {
+            background-color: var(--bg-card);
+            padding: 35px 30px;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            width: 100%;
+            max-width: 720px;
+            border: 1px solid var(--border);
+        }
+
+        .secao-titulo {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--primary);
+            margin: 25px 0 15px 0;
+            padding-bottom: 6px;
+            border-bottom: 2px solid var(--primary-light);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .secao-titulo:first-of-type {
+            margin-top: 5px;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            font-size: 13.5px;
+            margin-top: 16px;
+            margin-bottom: 6px;
+            color: var(--text-main);
+        }
+
+        .label-hint {
+            font-size: 11.5px;
+            font-weight: normal;
+            color: var(--text-muted);
+            margin-left: 4px;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        input[type="date"],
+        select,
+        textarea {
+            width: 100%;
+            padding: 11px 14px;
+            border: 1.5px solid var(--border);
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 14.5px;
+            background-color: var(--bg-card);
+            color: var(--text-main);
+            transition: all 0.2s ease;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: var(--border-focus);
+            box-shadow: 0 0 0 3px rgba(0, 86, 179, 0.15);
+        }
+
+        body.dark-mode input:focus, 
+        body.dark-mode select:focus, 
+        body.dark-mode textarea:focus {
+            box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2);
+        }
+
+        .contador {
+            font-size: 11.5px;
+            color: var(--text-muted);
+            text-align: right;
+            margin-top: 4px;
+        }
+
+        .contador.limite {
+            color: var(--danger);
+            font-weight: bold;
+        }
+
+        /* --- AUTOCOMPLETE E DROPDOWNS --- */
+        .autocomplete-container {
+            position: relative;
+            width: 100%;
+        }
+
+        .autocomplete-items {
+            position: absolute;
+            border: 1px solid var(--border);
+            border-top: none;
+            z-index: 100;
+            top: 100%;
+            left: 0;
+            right: 0;
+            max-height: 260px;
+            overflow-y: auto;
+            background-color: var(--bg-card);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.15);
+            border-radius: 0 0 8px 8px;
+        }
+
+        .autocomplete-items div {
+            padding: 10px 14px;
+            cursor: pointer;
+            border-bottom: 1px solid var(--border);
+            font-size: 13.5px;
+            transition: background-color 0.15s;
+        }
+
+        .autocomplete-items div:hover {
+            background-color: var(--primary-light);
+            color: var(--primary);
+            font-weight: 600;
+        }
+
+        /* --- PAINEL DEDICADO DO QUALCID (MÓDULO VISUAL COMPLETO) --- */
+        .painel-qualcid {
+            margin: 20px 0 25px 0;
+            padding: 22px;
+            background: linear-gradient(180deg, #f8fbff 0%, #f0f7ff 100%);
+            border: 2px solid #0284c7;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(2, 132, 199, 0.1);
+        }
+
+        body.dark-mode .painel-qualcid {
+            background: linear-gradient(180deg, #0c2135 0%, #081a2b 100%);
+            border-color: #38bdf8;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+        }
+
+        .qualcid-topo {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+
+        .qualcid-marca {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .qualcid-marca h3 {
+            font-size: 17px;
+            color: #0369a1;
+            font-weight: 800;
+        }
+
+        body.dark-mode .qualcid-marca h3 {
+            color: #38bdf8;
+        }
+
+        .qualcid-marca p {
+            font-size: 12.5px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .tag-reg-ativa {
+            background-color: #dcfce7;
+            color: #15803d;
+            font-size: 11.5px;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 20px;
+            border: 1px solid #16a34a;
+            white-space: nowrap;
+        }
+
+        body.dark-mode .tag-reg-ativa {
+            background-color: #052e16;
+            color: #4ade80;
+            border-color: #22c55e;
+        }
+
+        .qualcid-busca-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .qualcid-busca-row input {
+            flex: 1;
+            font-size: 15px;
+            padding: 13px 16px;
+            border: 2px solid #0284c7;
+            border-radius: 8px;
+            background-color: var(--bg-card);
+        }
+
+        .btn-buscar-qualcid {
+            background: #0284c7;
+            color: white;
+            border: none;
+            padding: 0 22px;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-buscar-qualcid:hover {
+            background: #0369a1;
+            transform: translateY(-1px);
+        }
+
+        .qualcid-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 16px;
+        }
+
+        .qualcid-chip {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .qualcid-chip:hover {
+            border-color: #0284c7;
+            color: #0284c7;
+            background-color: #f0f9ff;
+            transform: translateY(-1px);
+        }
+
+        /* --- LISTA DE RESULTADOS QUALCID (IDÊNTICA AO PRINT) --- */
+        .qualcid-resultado-card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            margin-top: 10px;
+        }
+
+        .qualcid-doenca-destaque {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text-main);
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .qualcid-subtitulo-procs {
+            font-size: 13px;
+            font-weight: 700;
+            color: #0369a1;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        body.dark-mode .qualcid-subtitulo-procs {
+            color: #38bdf8;
+        }
+
+        .qualcid-itens-lista {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            max-height: 380px;
+            overflow-y: auto;
+        }
+
+        /* Linha com ponto idêntica ao print da regulação */
+        .qualcid-linha-proc {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 12px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background-color: var(--bg-card);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            gap: 10px;
+        }
+
+        .qualcid-linha-proc:hover {
+            border-color: #0284c7;
+            background-color: #f0f9ff;
+            transform: translateX(3px);
+            box-shadow: 0 2px 8px rgba(2, 132, 199, 0.15);
+        }
+
+        body.dark-mode .qualcid-linha-proc:hover {
+            background-color: #1e293b;
+            border-color: #38bdf8;
+        }
+
+        .qualcid-proc-conteudo {
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+            flex: 1;
+            font-size: 13.5px;
+            line-height: 1.4;
+        }
+
+        .qualcid-bullet {
+            color: #0f172a;
+            font-size: 14px;
+            font-weight: 900;
+            line-height: 1;
+        }
+
+        body.dark-mode .qualcid-bullet {
+            color: #38bdf8;
+        }
+
+        .qualcid-cod-proc {
+            font-family: monospace;
+            font-weight: 800;
+            color: #0284c7;
+            white-space: nowrap;
+        }
+
+        body.dark-mode .qualcid-cod-proc {
+            color: #38bdf8;
+        }
+
+        .qualcid-nome-proc {
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        .qualcid-btn-usar {
+            background-color: #e0f2fe;
+            color: #0369a1;
+            border: 1px solid #7dd3fc;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 700;
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+
+        .qualcid-linha-proc:hover .qualcid-btn-usar {
+            background-color: #0284c7;
+            color: white;
+            border-color: #0284c7;
+        }
+
+        .qualcid-aviso-sucesso {
+            display: none;
+            background-color: #dcfce7;
+            color: #15803d;
+            border: 1px solid #22c55e;
+            padding: 10px 14px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: bold;
+            margin-top: 10px;
+            animation: fadeIn 0.3s;
+        }
+
+        .qualcid-badge-grupo {
+            font-size: 11px;
+            font-weight: 700;
+            padding: 2px 7px;
+            border-radius: 4px;
+            white-space: nowrap;
+        }
+
+        .qualcid-badge-03 {
+            background-color: #dbeafe;
+            color: #1d4ed8;
+            border: 1px solid #bfdbfe;
+        }
+
+        .qualcid-badge-04 {
+            background-color: #d1fae5;
+            color: #047857;
+            border: 1px solid #a7f3d0;
+        }
+
+        body.dark-mode .qualcid-badge-03 {
+            background-color: #1e3a8a;
+            color: #bfdbfe;
+            border-color: #3b82f6;
+        }
+
+        body.dark-mode .qualcid-badge-04 {
+            background-color: #064e3b;
+            color: #a7f3d0;
+            border-color: #10b981;
+        }
+
+        .qualcid-abas-doencas {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 12px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .qualcid-pill-doenca {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            padding: 5px 11px;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.15s;
+            color: var(--text-main);
+        }
+
+        .qualcid-pill-doenca:hover {
+            border-color: #0284c7;
+            color: #0284c7;
+        }
+
+        .qualcid-pill-doenca.ativo {
+            background-color: #0284c7;
+            color: white;
+            border-color: #0284c7;
+            font-weight: bold;
+        }
+
+        /* --- CAMPOS SELECIONADOS COM SUCESSO --- */
+        .campo-selecionado {
+            border-color: var(--success) !important;
+            background-color: var(--success-bg) !important;
+        }
+
+        /* --- MENSAGENS DE ERRO --- */
+        #mensagemErro {
+            display: none;
+            background-color: var(--danger-bg);
+            color: var(--danger);
+            padding: 14px 16px;
+            margin-top: 20px;
+            margin-bottom: 15px;
+            border-left: 5px solid var(--danger);
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .campo-invalido {
+            border-color: var(--danger) !important;
+            background-color: var(--danger-bg) !important;
+        }
+
+        /* --- BOTÃO GERAR AIH --- */
+        .btn-gerar {
+            background: linear-gradient(135deg, #0056b3 0%, #0284c7 100%);
+            color: white;
+            border: none;
+            padding: 16px 20px;
+            font-size: 16px;
+            font-weight: 700;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 25px;
+            box-shadow: 0 4px 12px rgba(0, 86, 179, 0.3);
+            transition: all 0.2s;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-gerar:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0, 86, 179, 0.4);
+        }
+
+        .btn-gerar:active {
+            transform: translateY(0);
+        }
+
+        .btn-imprimir {
+            background: linear-gradient(135deg, #059669 0%, #10b981 100%) !important;
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3) !important;
+        }
+
+        .btn-imprimir:hover {
+            box-shadow: 0 6px 16px rgba(16, 185, 129, 0.45) !important;
+        }
+
+        .btn-imprimir-apac {
+            background: linear-gradient(135deg, #0d9488 0%, #14b8a6 100%) !important;
+            box-shadow: 0 4px 12px rgba(20, 184, 166, 0.3) !important;
+        }
+
+        /* --- PERFIL MULTI-HOSPITAL --- */
+        .bloco-perfil-hospital {
+            background-color: var(--primary-light);
+            border: 1px solid #bfdbfe;
+            border-radius: 8px;
+            padding: 10px 14px;
+            margin-bottom: 15px;
+        }
+
+        body.dark-mode .bloco-perfil-hospital {
+            background-color: #0c4a6e;
+            border-color: #0369a1;
+        }
+
+        .btn-acao-perfil {
+            background-color: white;
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            border-radius: 5px;
+            padding: 4px 9px;
+            font-size: 11.5px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-acao-perfil:hover {
+            background-color: #f0f9ff;
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        .btn-acao-perfil-del:hover {
+            background-color: #fee2e2;
+            border-color: var(--danger);
+            color: var(--danger);
+        }
+
+        /* --- ALERTA ANTI-GLOSA --- */
+        .alerta-anti-glosa {
+            background-color: #fef3c7;
+            color: #92400e;
+            border: 1px solid #f59e0b;
+            border-left: 5px solid #d97706;
+            padding: 12px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            margin-top: 15px;
+            margin-bottom: 5px;
+            animation: fadeIn 0.3s ease;
+            line-height: 1.5;
+        }
+
+        body.dark-mode .alerta-anti-glosa {
+            background-color: #451a03;
+            color: #fef3c7;
+            border-color: #b45309;
+        }
+
+        /* --- HISTÓRICO DE LAUDOS --- */
+        .card-historico {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            width: 100%;
+            max-width: 650px;
+            margin-top: 25px;
+            padding: 16px 20px;
+            box-sizing: border-box;
+            transition: all 0.3s ease;
+        }
+
+        .historico-topo {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .badge-historico {
+            background-color: var(--primary);
+            color: white;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 2px 7px;
+            border-radius: 10px;
+        }
+
+        .lista-historico {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 14px;
+            max-height: 380px;
+            overflow-y: auto;
+        }
+
+        .item-historico {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background-color: var(--bg-page);
+            font-size: 13px;
+            gap: 10px;
+            transition: all 0.2s;
+        }
+
+        body.dark-mode .item-historico {
+            background-color: #1e293b;
+            border-color: #334155;
+        }
+
+        .item-historico-info {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            flex: 1;
+        }
+
+        .btn-restaurar-hist {
+            background-color: #0284c7;
+            color: white;
+            border: none;
+            padding: 7px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+
+        .btn-restaurar-hist:hover {
+            background-color: #0369a1;
+            transform: scale(1.02);
+        }
+
+        /* --- BOTÕES E LINKS AUXILIARES --- */
+        .link-limpar {
+            display: block;
+            text-align: right;
+            font-size: 12px;
+            color: var(--danger);
+            text-decoration: underline;
+            cursor: pointer;
+            margin-top: 8px;
+            margin-bottom: 16px;
+        }
+
+        .link-limpar:hover {
+            opacity: 0.8;
+        }
+
+        /* --- RODAPÉ --- */
+        footer {
+            margin-top: 30px;
+            text-align: center;
+            font-size: 12.5px;
+            color: var(--text-muted);
+            max-width: 600px;
+            line-height: 1.6;
+        }
+
+        /* --- RESPONSIVIDADE --- */
+        @media (max-width: 640px) {
+            body { padding: 12px; }
+            form { padding: 22px 16px; }
+            .header { flex-direction: column; gap: 12px; align-items: flex-start; }
+            .btn-theme { align-self: flex-end; margin-top: -38px; }
+        }
+    </style>
+</head>
+<body>
+
+    <header class="header">
+        <div class="logo-box">
+            <div>
+                <div class="logo-title">🩺 ClinCod</div>
+                <div class="logo-subtitle" id="logoSubtitle">Emissor de Laudo de AIH & Consulta SIGTAP</div>
+            </div>
+        </div>
+        <button id="btnTema" class="btn-theme" onclick="alternarTema()">🌙 Modo Escuro</button>
+    </header>
+
+    <!-- HUB DE NAVEGAÇÃO ENTRE AIH E APAC -->
+    <div class="hub-navegacao">
+        <button type="button" class="btn-aba ativa" id="abaAih" onclick="alternarAba('aih')">
+            <span>🏥 Laudo de AIH (Internação)</span>
+        </button>
+        <button type="button" class="btn-aba aba-apac" id="abaApac" onclick="alternarAba('apac')">
+            <span>🔬 Laudo de APAC (Exames & Alto Custo)</span>
+        </button>
+    </div>
+
+    <form id="formClinCod">
+        
+        <!-- BLOCO 1: ESTABELECIMENTO -->
+        <div class="secao-titulo">🏥 1. Identificação do Estabelecimento de Saúde</div>
+        
+        <div class="bloco-perfil-hospital">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <label for="seletorPerfilHospital" style="margin: 0; font-size: 12px; color: var(--accent); font-weight: 700;">
+                    🏢 Unidade / Plantão Salvo:
+                </label>
+                <div style="display: flex; gap: 6px;">
+                    <button type="button" class="btn-acao-perfil" onclick="salvarPerfilHospitalAtual()" title="Salva os dados digitados como um perfil rápido de hospital/UPA">
+                        💾 Salvar Este Hospital
+                    </button>
+                    <button type="button" class="btn-acao-perfil btn-acao-perfil-del" id="btnExcluirPerfilHosp" onclick="excluirPerfilHospitalAtual()" title="Excluir este perfil" style="display: none;">
+                        🗑️ Excluir
+                    </button>
+                </div>
+            </div>
+            <select id="seletorPerfilHospital" onchange="trocarPerfilHospital(this.value)" style="margin-bottom: 4px; font-weight: 600;">
+                <option value="padrao">🏥 Unidade Principal (Padrão)</option>
+            </select>
+        </div>
+
+        <label for="nomeEstabelecimento">Nome do Estabelecimento Solicitante: *</label>
+        <input type="text" id="nomeEstabelecimento" placeholder="Ex: Hospital Municipal Dr. José Silva">
+
+        <label for="cnesEstabelecimento">Código CNES do Estabelecimento: <span class="label-hint">(7 dígitos)</span></label>
+        <input type="number" id="cnesEstabelecimento" placeholder="Ex: 1234567" maxlength="7">
+
+        <!-- BLOCO 2: PACIENTE -->
+        <div class="secao-titulo">👤 2. Identificação do Paciente</div>
+
+        <label for="nomePaciente">Nome Completo do Paciente: *</label>
+        <input type="text" id="nomePaciente" placeholder="Nome completo sem abreviações">
+
+        <label for="cnsPaciente">Cartão Nacional de Saúde (CNS): * <span class="label-hint">(15 dígitos)</span></label>
+        <input type="number" id="cnsPaciente" placeholder="Ex: 700000000000000" maxlength="15">
+
+        <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 180px;">
+                <label for="dataNascimento">Data de Nascimento: *</label>
+                <input type="date" id="dataNascimento">
+            </div>
+            <div style="flex: 1; min-width: 140px;">
+                <label for="sexoPaciente">Sexo: *</label>
+                <select id="sexoPaciente">
+                    <option value="">Selecione...</option>
+                    <option value="M">Masculino</option>
+                    <option value="F">Feminino</option>
+                </select>
+            </div>
+        </div>
+
+        <label for="nomeMae">Nome Completo da Mãe: *</label>
+        <input type="text" id="nomeMae" placeholder="Nome completo da mãe">
+
+        <label for="nomeResponsavel">Nome do Responsável:</label>
+        <input type="text" id="nomeResponsavel" placeholder="Se paciente menor ou incapaz">
+
+        <label for="endereco">Endereço do Paciente:</label>
+        <input type="text" id="endereco" placeholder="Rua, número, complemento, bairro">
+
+        <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+            <div style="flex: 3; min-width: 180px;">
+                <label for="municipioResidencia">Município de Residência: *</label>
+                <input type="text" id="municipioResidencia" placeholder="Ex: São Paulo">
+            </div>
+            <div style="flex: 1; min-width: 70px;">
+                <label for="uf">UF:</label>
+                <input type="text" id="uf" maxlength="2" placeholder="SP" style="text-transform: uppercase;">
+            </div>
+            <div style="flex: 2; min-width: 120px;">
+                <label for="cep">CEP:</label>
+                <input type="number" id="cep" placeholder="Ex: 01001000" maxlength="8">
+            </div>
+        </div>
+
+        <!-- ======================================================== -->
+        <!-- CONTAINER EXCLUSIVO: LAUDO DE AIH (INTERNAÇÃO)           -->
+        <!-- ======================================================== -->
+        <div id="blocoAih">
+            
+            <!-- BLOCO 3 AIH: JUSTIFICATIVA DA INTERNAÇÃO -->
+            <div class="secao-titulo">📋 3. Justificativa da Internação</div>
+
+            <label for="sinaisSintomas">Principais Sinais e Sintomas Clínicos: *</label>
+            <textarea id="sinaisSintomas" rows="3" maxlength="1000" placeholder="Descreva sinais vitais, queixas clínicas, escalas e estado do paciente..."></textarea>
+            <div id="cont-sinaisSintomas" class="contador">0 / 1000</div>
+
+            <label for="condicoesInternacao">Condições que Justificam a Internação: *</label>
+            <textarea id="condicoesInternacao" rows="3" maxlength="400" placeholder="Exame físico detalhado, gravidade e motivo da impossibilidade de manejo ambulatorial..."></textarea>
+            <div id="cont-condicoesInternacao" class="contador">0 / 400</div>
+
+            <label for="principaisResultados">Principais Resultados de Provas Diagnósticas: *</label>
+            <textarea id="principaisResultados" rows="3" maxlength="400" placeholder="Exames de sangue, gasometria, ECG, raio-X, TC com datas e valores críticos..."></textarea>
+            <div id="cont-principaisResultados" class="contador">0 / 400</div>
+
+            <!-- BLOCO 4 AIH: BUSCA CLINCOD (INTERNAÇÃO / 03 E 04) -->
+            <div class="secao-titulo">🔎 4. Buscar CID — Consulta de Procedimentos</div>
+
+            <div class="painel-qualcid">
+                <div class="qualcid-topo">
+                    <div class="qualcid-marca">
+                        <span style="font-size: 26px;">🩺</span>
+                        <div>
+                            <h3>Central de CID + Tabela SIGTAP</h3>
+                            <p>Pesquise a doença, código CID ou procedimento para preencher o laudo automaticamente</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="qualcid-busca-row">
+                    <input type="text" id="campoBuscaQualCid" 
+                           placeholder="Digite a doença (ex: insuficiência cardíaca, pneumonia, apendicite, infarto, fratura, sepse...) ou código CID..." 
+                           autocomplete="off" 
+                           oninput="executarBuscaQualCid(this.value)">
+                    <button type="button" class="btn-buscar-qualcid" onclick="executarBuscaQualCid(document.getElementById('campoBuscaQualCid').value)">
+                        <span>🔍 Buscar no ClinCod</span>
+                    </button>
+                </div>
+
+                <div style="font-size: 11.5px; font-weight: 700; color: var(--text-muted); margin-bottom: 6px;">Exemplos rápidos de internação:</div>
+                <div class="qualcid-chips">
+                    <span class="qualcid-chip" onclick="aplicarExemplo('insuficiencia cardiaca')">❤️ Insuficiência Cardíaca</span>
+                    <span class="qualcid-chip" onclick="aplicarExemplo('pneumonia')">🫁 Pneumonia</span>
+                    <span class="qualcid-chip" onclick="aplicarExemplo('apendicite')">🩺 Apendicite Aguda</span>
+                    <span class="qualcid-chip" onclick="aplicarExemplo('infarto')">⚡ Infarto do Miocárdio</span>
+                    <span class="qualcid-chip" onclick="aplicarExemplo('fratura de femur')">🦴 Fratura de Fêmur</span>
+                    <span class="qualcid-chip" onclick="aplicarExemplo('sepse')">🧪 Sepse / Septicemia</span>
+                    <span class="qualcid-chip" onclick="aplicarExemplo('avc')">🧠 AVC / Derrame</span>
+                    <span class="qualcid-chip" onclick="aplicarExemplo('colecistite')">🏥 Colecistite / Vesícula</span>
+                    <span class="qualcid-chip" onclick="aplicarExemplo('parto')">👶 Parto</span>
+                    <span class="qualcid-chip" onclick="aplicarExemplo('hernia')">🩹 Hérnia Inguinal</span>
+                    <span class="qualcid-chip" onclick="aplicarExemplo('diabetes')">🩸 Diabetes Mellitus</span>
+                    <span class="qualcid-chip" onclick="aplicarExemplo('infeccao urinaria')">💧 Infecção Urinária</span>
+                </div>
+
+                <div id="avisoSucessoQualCid" class="qualcid-aviso-sucesso"></div>
+
+                <div id="qualcidResultadosCard" class="qualcid-resultado-card">
+                    <div id="qualcidAbasDoencas" class="qualcid-abas-doencas" style="display: none;"></div>
+
+                    <div class="qualcid-doenca-destaque">
+                        <span id="qualcidDoencaTexto">Carregando ClinCod...</span>
+                        <span class="tag-reg-ativa" id="qualcidContadorProcs">0 procedimentos hospitalares</span>
+                    </div>
+                    <div class="qualcid-subtitulo-procs">
+                        <span>📋 Procedimentos hospitalares autorizados para esta patologia (Clique para aplicar no laudo):</span>
+                    </div>
+                    <div id="qualcidListaProcs" class="qualcid-itens-lista"></div>
+                </div>
+            </div>
+
+            <p style="font-size: 12px; color: var(--text-muted); margin-top: 15px; margin-bottom: 6px;">
+                📌 Campos oficiais do Laudo de AIH (Preenchidos automaticamente ao clicar no procedimento acima):
+            </p>
+
+            <label for="diagnosticoInicial">Diagnóstico Inicial / Nome da Doença: *</label>
+            <input type="text" id="diagnosticoInicial" placeholder="Preenchido automaticamente ao clicar no ClinCod acima">
+
+            <label for="buscaCidPrincipal">CID-10 Principal: * <span class="label-hint">(Código oficial do SUS)</span></label>
+            <input type="text" id="buscaCidPrincipal" placeholder="Ex: I50.0" style="text-transform: uppercase;">
+            <input type="hidden" id="cidPrincipal">
+
+            <div style="display: flex; gap: 15px; margin-top: 10px;">
+                <div style="flex: 1;">
+                    <label for="cidSecundario">CID-10 Secundário:</label>
+                    <input type="text" id="cidSecundario" maxlength="4" placeholder="Ex: I10" style="text-transform: uppercase;">
+                </div>
+                <div style="flex: 1;">
+                    <label for="cidCausasAssociadas">CID-10 Causas Associadas:</label>
+                    <input type="text" id="cidCausasAssociadas" maxlength="4" placeholder="Ex: E11" style="text-transform: uppercase;">
+                </div>
+            </div>
+
+            <label for="descricaoProcedimento" style="margin-top: 20px;">Descrição do Procedimento Solicitado: *</label>
+            <input type="text" id="descricaoProcedimento" placeholder="Preenchido automaticamente pelo ClinCod acima">
+
+            <label for="buscaCodigoProcedimento">Código do Procedimento (SIGTAP): * <span class="label-hint">(10 dígitos)</span></label>
+            <input type="text" id="buscaCodigoProcedimento" placeholder="Preenchido automaticamente pelo ClinCod acima">
+            <input type="hidden" id="codigoProcedimento">
+
+            <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-top: 10px;">
+                <div style="flex: 1; min-width: 160px;">
+                    <label for="clinica">Clínica: *</label>
+                    <input type="text" id="clinica" placeholder="Ex: Médica, Cirúrgica, UTI, Pediátrica">
+                </div>
+                <div style="flex: 1; min-width: 140px;">
+                    <label for="caraterInternacao">Caráter da Internação: *</label>
+                    <select id="caraterInternacao">
+                        <option value="">Selecione...</option>
+                        <option value="Urgência" selected>Urgência</option>
+                        <option value="Eletiva">Eletiva</option>
+                    </select>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- ======================================================== -->
+        <!-- CONTAINER EXCLUSIVO: LAUDO DE APAC (EXAMES & ALTO CUSTO) -->
+        <!-- ======================================================== -->
+        <div id="blocoApac" style="display: none;">
+
+            <!-- BLOCO 3 APAC: PROCEDIMENTO(S) DE ALTA COMPLEXIDADE -->
+            <div class="secao-titulo secao-titulo-apac">🔬 3. Procedimento(s) Solicitado(s) de Alta Complexidade</div>
+
+            <div class="painel-qualcid painel-apac">
+                <div class="qualcid-topo">
+                    <div class="qualcid-marca">
+                        <span style="font-size: 26px;">🔬</span>
+                        <div>
+                            <h3>Central de Exames & Procedimentos de Alta Complexidade</h3>
+                            <p>Pesquise exames diagnósticos (TC, Ressonância, Biópsia, Cintilografia, Cateterismo) ou terapias de alto custo (Hemodiálise, Quimio)</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="qualcid-busca-row">
+                    <input type="text" id="campoBuscaApac" 
+                           placeholder="Digite o exame (ex: tomografia cranio, ressonancia coluna, cateterismo, biopsia, hemodialise...) ou código..." 
+                           autocomplete="off" 
+                           oninput="executarBuscaApac(this.value)">
+                    <button type="button" class="btn-buscar-qualcid" onclick="executarBuscaApac(document.getElementById('campoBuscaApac').value)">
+                        <span>🔍 Buscar no ClinCod</span>
+                    </button>
+                </div>
+
+                <div style="font-size: 11.5px; font-weight: 700; color: var(--text-muted); margin-bottom: 6px;">Exemplos rápidos de exames & alto custo:</div>
+                <div class="qualcid-chips">
+                    <span class="qualcid-chip" onclick="aplicarExemploApac('tomografia cranio')">🧠 TC de Crânio</span>
+                    <span class="qualcid-chip" onclick="aplicarExemploApac('tomografia torax')">🫁 TC de Tórax</span>
+                    <span class="qualcid-chip" onclick="aplicarExemploApac('ressonancia coluna')">🦴 RM de Coluna</span>
+                    <span class="qualcid-chip" onclick="aplicarExemploApac('ressonancia joelho')">🦵 RM de Joelho</span>
+                    <span class="qualcid-chip" onclick="aplicarExemploApac('cateterismo cardiaco')">❤️ Cateterismo Cardíaco</span>
+                    <span class="qualcid-chip" onclick="aplicarExemploApac('ressonancia multiparametrica')">🔬 RM de Próstata</span>
+                    <span class="qualcid-chip" onclick="aplicarExemploApac('endoscopia digestiva')">🩺 Endoscopia Digestiva</span>
+                    <span class="qualcid-chip" onclick="aplicarExemploApac('colonoscopia')">🔍 Colonoscopia</span>
+                    <span class="qualcid-chip" onclick="aplicarExemploApac('cintilografia ossea')">🧬 Cintilografia Óssea</span>
+                    <span class="qualcid-chip" onclick="aplicarExemploApac('hemodialise')">🩸 Hemodiálise</span>
+                    <span class="qualcid-chip" onclick="aplicarExemploApac('biopsia tireoide')">🧪 Biópsia de Tireoide</span>
+                    <span class="qualcid-chip" onclick="aplicarExemploApac('ecocardiograma')">🫀 Ecocardiograma</span>
+                </div>
+
+                <div id="avisoSucessoApac" class="qualcid-aviso-sucesso"></div>
+
+                <div id="apacResultadosCard" class="qualcid-resultado-card">
+                    <div class="qualcid-doenca-destaque">
+                        <span id="apacDoencaTexto">Carregando catálogo de exames...</span>
+                        <span class="tag-reg-ativa" id="apacContadorProcs">0 exames</span>
+                    </div>
+                    <div class="qualcid-subtitulo-procs">
+                        <span>📋 Exames e procedimentos autorizados (Clique para aplicar no laudo de APAC):</span>
+                    </div>
+                    <div id="apacListaProcs" class="qualcid-itens-lista"></div>
+                </div>
+            </div>
+
+            <p style="font-size: 12px; color: var(--text-muted); margin-top: 15px; margin-bottom: 6px;">
+                📌 Procedimento Principal da APAC (Preenchido automaticamente ao clicar no exame acima):
+            </p>
+
+            <label for="descricaoProcedimentoApac">Descrição do Procedimento Principal: *</label>
+            <input type="text" id="descricaoProcedimentoApac" placeholder="Preenchido automaticamente pelo ClinCod acima">
+
+            <div style="display: flex; gap: 15px; margin-top: 10px; flex-wrap: wrap;">
+                <div style="flex: 3; min-width: 200px;">
+                    <label for="buscaCodigoProcedimentoApac">Código do Procedimento (SIGTAP): * <span class="label-hint">(10 dígitos)</span></label>
+                    <input type="text" id="buscaCodigoProcedimentoApac" placeholder="Preenchido automaticamente pelo ClinCod acima">
+                    <input type="hidden" id="codigoProcedimentoApac">
+                </div>
+                <div style="flex: 1; min-width: 100px;">
+                    <label for="qtdeProcedimentoApac">Quantidade: *</label>
+                    <input type="number" id="qtdeProcedimentoApac" min="1" max="99" value="1">
+                </div>
+            </div>
+
+            <!-- BLOCO 4 APAC: PROCEDIMENTOS SECUNDÁRIOS -->
+            <div class="secao-titulo secao-titulo-apac" style="margin-top: 25px;">➕ 4. Procedimento(s) Secundário(s) <span class="label-hint">(Opcional)</span></div>
+            <div id="containerProcedimentosSecundariosApac"></div>
+
+            <div class="botoes-dinamicos">
+                <button type="button" id="btnAdicionarProcSecApac" class="btn-secundario" onclick="adicionarProcedimentoSecundarioApac()">
+                    <span>➕ Adicionar Exame / Procedimento Secundário</span>
+                </button>
+                <button type="button" id="btnRemoverProcSecApac" class="btn-remover" onclick="removerProcedimentoSecundarioApac()" style="display: none;">
+                    <span>🗑️ Remover Último Secundário</span>
+                </button>
+            </div>
+
+            <!-- BLOCO 5 APAC: JUSTIFICATIVA CLÍNICA E DIAGNÓSTICO -->
+            <div class="secao-titulo secao-titulo-apac">📝 5. Justificativa Clínica e Diagnóstico (APAC)</div>
+
+            <label for="descricaoDiagnosticoApac">Descrição Clínica Resumida do Quadro: * <span class="label-hint">(Resumo no cabeçalho do laudo)</span></label>
+            <textarea id="descricaoDiagnosticoApac" rows="2" maxlength="60" placeholder="Ex: Cefaleia súbita de forte intensidade e déficit motor agudo..."></textarea>
+            <div id="cont-descricaoDiagnosticoApac" class="contador">0 / 60</div>
+
+            <label for="observacoesApac">Observações e Informações Complementares: * <span class="label-hint">(Quadro clínico detalhado, histórico e justificativa)</span></label>
+            <textarea id="observacoesApac" rows="4" maxlength="650" placeholder="Histórico da doença atual, exame físico, tratamentos prévios e motivo da necessidade do exame de alta complexidade..."></textarea>
+            <div id="cont-observacoesApac" class="contador">0 / 650</div>
+
+            <label for="diagnosticoInicialApac">Diagnóstico / Nome da Doença: *</label>
+            <input type="text" id="diagnosticoInicialApac" placeholder="Digite o nome da doença ou código CID...">
+
+            <label for="buscaCidPrincipalApac">CID-10 Principal: * <span class="label-hint">(Código oficial do SUS)</span></label>
+            <input type="text" id="buscaCidPrincipalApac" placeholder="Ex: I64" style="text-transform: uppercase;">
+            <input type="hidden" id="cidPrincipalApac">
+
+            <div style="display: flex; gap: 15px; margin-top: 10px;">
+                <div style="flex: 1;">
+                    <label for="cidSecundarioApac">CID-10 Secundário:</label>
+                    <input type="text" id="cidSecundarioApac" maxlength="4" placeholder="Ex: I10" style="text-transform: uppercase;">
+                </div>
+                <div style="flex: 1;">
+                    <label for="cidCausasAssociadasApac">CID-10 Causas Associadas:</label>
+                    <input type="text" id="cidCausasAssociadasApac" maxlength="4" placeholder="Ex: E11" style="text-transform: uppercase;">
+                </div>
+            </div>
+
+        </div>
+
+        <!-- BLOCO 5: PROFISSIONAL -->
+        <div class="secao-titulo">🩺 5. Profissional Solicitante</div>
+
+        <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 130px;">
+                <label for="tipoDocumentoProfissional">Tipo de Documento: *</label>
+                <select id="tipoDocumentoProfissional">
+                    <option value="CNS" selected>CNS (15 dígitos)</option>
+                    <option value="CPF">CPF (11 dígitos)</option>
+                </select>
+            </div>
+            <div style="flex: 2; min-width: 180px;">
+                <label for="numeroDocProfissional">Nº Documento do Profissional: *</label>
+                <input type="number" id="numeroDocProfissional" placeholder="Apenas números">
+            </div>
+        </div>
+
+        <label for="nomeProfissional">Nome Completo do Médico / Profissional: *</label>
+        <input type="text" id="nomeProfissional" placeholder="Dr(a). Nome Completo">
+
+        <a class="link-limpar" onclick="limparMemoria()">[ Limpar dados fixos do hospital e médico salvos neste navegador ]</a>
+
+        <label for="dataSolicitacao">Data da Solicitação: *</label>
+        <input type="date" id="dataSolicitacao">
+
+        <!-- ALERTA ANTI-GLOSA PREVENTIVO -->
+        <div id="alertaAntiGlosa" class="alerta-anti-glosa" style="display: none;"></div>
+
+        <!-- ALERTA DE ERRO -->
+        <div id="mensagemErro"></div>
+
+        <!-- BOTÕES DINÂMICOS CONFORME A ABA ATIVA -->
+        <div id="containerBotaoAih" style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 25px;">
+            <button type="button" class="btn-gerar" onclick="gerarAihPdf('download')" style="flex: 1; min-width: 220px; margin-top: 0;">
+                <span>💾 Baixar Laudo AIH (PDF)</span>
+            </button>
+            <button type="button" class="btn-gerar btn-imprimir" onclick="gerarAihPdf('imprimir')" style="flex: 1; min-width: 220px; margin-top: 0;">
+                <span>🖨️ Gerar e Imprimir Direto</span>
+            </button>
+        </div>
+
+        <div id="containerBotaoApac" style="display: none; gap: 12px; flex-wrap: wrap; margin-top: 25px;">
+            <button type="button" class="btn-gerar btn-gerar-apac" onclick="gerarApacPdf('download')" style="flex: 1; min-width: 220px; margin-top: 0;">
+                <span>💾 Baixar Laudo APAC (PDF)</span>
+            </button>
+            <button type="button" class="btn-gerar btn-imprimir btn-imprimir-apac" onclick="gerarApacPdf('imprimir')" style="flex: 1; min-width: 220px; margin-top: 0;">
+                <span>🖨️ Gerar e Imprimir Direto</span>
+            </button>
+        </div>
+
+    </form>
+
+    <!-- CARD DO HISTÓRICO DE ÚLTIMOS LAUDOS EMITIDOS -->
+    <div class="card-historico" id="cardHistoricoLaudos">
+        <div class="historico-topo" onclick="alternarExibicaoHistorico()">
+            <span style="font-weight: 700; font-size: 13.5px; display: flex; align-items: center; gap: 8px;">
+                <span>🕒</span> Últimos Laudos Emitidos neste Computador
+                <span id="contadorHistorico" class="badge-historico">0</span>
+            </span>
+            <span id="iconeSetaHistorico" style="font-size: 12px; font-weight: bold; color: var(--accent);">▼ Expandir</span>
+        </div>
+        <div id="corpoHistorico" style="display: none; padding-top: 12px;">
+            <div id="listaHistoricoItens" class="lista-historico"></div>
+            <div style="display: flex; justify-content: flex-end; margin-top: 10px;">
+                <button type="button" class="btn-acao-perfil btn-acao-perfil-del" onclick="limparHistoricoLaudos()">
+                    🗑️ Limpar Histórico
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>&copy; 2026 ClinCod — Sistema de Apoio ao Preenchimento de Laudo de AIH e Consulta de Procedimentos SUS.</p>
+        <p>Compatível 100% com GitHub Pages. Nenhum dado do paciente é enviado para servidores externos.</p>
+    </footer>
+
+    <script>
+        // --- COORDENADAS OFICIAIS DO MAPA DA AIH (PDF) ---
+        const mapaAih = {
+            nomeEstabelecimento: { x: 35,  y: 745, tamanho: 14 },
+            cnesEstabelecimento: { x: 475, y: 745, tamanho: 14, espacamento: 15 },
+            nome:                { x: 35,  y: 680, tamanho: 14 },
+            cns:                 { x: 35,  y: 655, tamanho: 14, espacamento: 18 }, 
+            dataNasc:            { x: 315, y: 655, tamanho: 15 }, 
+            sexoMasc:            { x: 418, y: 656, tamanho: 12 }, 
+            sexoFem:             { x: 470, y: 656, tamanho: 12 },
+            nomeMae:             { x: 35,  y: 632, tamanho: 14 },
+            nomeResponsavel:     { x: 35,  y: 609, tamanho: 14 }, 
+            endereco:            { x: 35,  y: 590, tamanho: 10 },
+            uf:                  { x: 448, y: 565, tamanho: 14, espacamento: 18 },   
+            cep:                 { x: 485, y: 565, tamanho: 14, espacamento: 11 },
+            municipioResidencia: { x: 35,  y: 565, tamanho: 14 },
+            
+            sinaisSintomas:       { x: 35,  y: 530, tamanho: 10, larguraMaxima: 540, alturaLinha: 10 },
+            condicoesInternacao:  { x: 35,  y: 425, tamanho: 10, larguraMaxima: 540, alturaLinha: 10 },
+            principaisResultados: { x: 35,  y: 368, tamanho: 10, larguraMaxima: 540, alturaLinha: 10 },
+            diagnosticoInicial:   { x: 35,  y: 315, tamanho: 8 },
+            cidPrincipal:         { x: 280, y: 315, tamanho: 14, espacamento: 10 },
+            cidSecundario:        { x: 380, y: 315, tamanho: 14, espacamento: 10 },
+            cidCausasAssociadas:  { x: 480, y: 315, tamanho: 14, espacamento: 10 },
+            
+            descricaoProcedimento: { x: 35,  y: 275, tamanho: 8 },
+            codigoProcedimento:    { x: 402, y: 275, tamanho: 14, espacamento: 18 },
+            clinica:               { x: 35,  y: 250, tamanho: 12 },
+            caraterInternacao:     { x: 150, y: 250, tamanho: 12 },
+            docProfissionalCns:    { x: 255, y: 250, tamanho: 12 },
+            docProfissionalCpf:    { x: 297, y: 250, tamanho: 12 },
+            numeroDocProfissional: { x: 337, y: 250, tamanho: 14, espacamento: 16 },
+            nomeProfissional:      { x: 35,  y: 228, tamanho: 12 },
+            dataSolicitacao:       { x: 303, y: 227, tamanho: 15 }
+        };
+
+        // --- COORDENADAS OFICIAIS DO MAPA DA APAC (PDF) ---
+        const mapaApac = {
+            nomeEstabelecimento: { x: 35,  y: 740, tamanho: 12 },
+            cnesEstabelecimento: { x: 460, y: 740, tamanho: 12, espacamento: 14 },
+            nomePaciente:        { x: 35,  y: 700, tamanho: 12 },
+            cnsPaciente:         { x: 35,  y: 675, tamanho: 14, espacamento: 18 }, 
+            dataNascimento:      { x: 310, y: 672, tamanho: 16 }, 
+            sexoMasc:            { x: 422, y: 700, tamanho: 12 }, 
+            sexoFem:             { x: 456, y: 700, tamanho: 12 },
+            nomeMae:             { x: 35,  y: 650, tamanho: 12 },
+            nomeResponsavel:     { x: 35,  y: 625, tamanho: 12 }, 
+            endereco:            { x: 35,  y: 605, tamanho: 12 },
+            municipioResidencia: { x: 35,  y: 580, tamanho: 12 },
+            uf:                  { x: 440, y: 580, tamanho: 12, espacamento: 14 },   
+            cep:                 { x: 470, y: 580, tamanho: 13, espacamento: 12 },
+            
+            codigoProcedimento:    { x: 35,  y: 540, tamanho: 14, espacamento: 18 },
+            descricaoProcedimento: { x: 220, y: 540, tamanho: 9 },
+            qtdeProcedimento:      { x: 525, y: 540, tamanho: 12 },
+            
+            procSecundario: {
+                xCodigo: 35,
+                xDescricao: 220,
+                xQtde: 525,
+                distanciaDoPrincipal: 45,
+                espacamentoY: 26,
+                tamanhoCod: 14,
+                espacamentoLetrasCod: 18,
+                tamanhoDesc: 9,
+                tamanhoQtde: 12
+            },
+            
+            descricaoDiagnostico: { x: 35,  y: 340, tamanho: 10, larguraMaxima: 540, alturaLinha: 12 },
+            cidPrincipal:         { x: 340,  y: 340, tamanho: 12, espacamento: 10 },
+            cidSecundario:        { x: 400, y: 340, tamanho: 12, espacamento: 10 },
+            cidCausasAssociadas:  { x: 480, y: 340, tamanho: 12, espacamento: 10 },
+            observacoesApac:      { x: 35,  y: 310, tamanho: 10, larguraMaxima: 540, alturaLinha: 12 },
+            
+            nomeProfissional:      { x: 35,  y: 205, tamanho: 12 },
+            dataSolicitacao:       { x: 305,  y: 202, tamanho: 15 },
+            numeroDocProfissional: { x: 150, y: 180, tamanho: 12, espacamento: 15.5 },
+            docCNS:                { x: 50,  y: 180, tamanho: 12 },
+            docCPF:                { x: 105, y: 180, tamanho: 12 } 
+        };
+
+        // --- BANCOS DE DADOS EM MEMÓRIA ---
+        let abaAtiva = 'aih';
+        let bancoCids = [];
+        let bancoProcedimentos = [];
+        let bancoProcedimentosApac = [];
+        let relacoesCidProcedimento = {};
+        let contadorProcSecApac = 0;
+
+        // --- SISTEMA DE ALTERNÂNCIA DE ABAS (HUB CLÍNICO) ---
+        function alternarAba(aba) {
+            abaAtiva = aba;
+            const btnAih = document.getElementById('abaAih');
+            const btnApac = document.getElementById('abaApac');
+            const blocoAih = document.getElementById('blocoAih');
+            const blocoApac = document.getElementById('blocoApac');
+            const btnContainerAih = document.getElementById('containerBotaoAih');
+            const btnContainerApac = document.getElementById('containerBotaoApac');
+            const subTitulo = document.getElementById('logoSubtitle');
+
+            if (aba === 'apac') {
+                btnAih.classList.remove('ativa');
+                btnApac.classList.add('ativa');
+                blocoAih.style.display = 'none';
+                blocoApac.style.display = 'block';
+                btnContainerAih.style.display = 'none';
+                btnContainerApac.style.display = 'block';
+                if (subTitulo) subTitulo.innerText = 'Emissor de Laudo de APAC & Consulta de Exames de Alta Complexidade';
+                
+                const campoApac = document.getElementById('campoBuscaApac');
+                if (campoApac && !campoApac.value.trim()) {
+                    aplicarExemploApac('tomografia cranio');
+                }
+            } else {
+                btnApac.classList.remove('ativa');
+                btnAih.classList.add('ativa');
+                blocoApac.style.display = 'none';
+                blocoAih.style.display = 'block';
+                btnContainerApac.style.display = 'none';
+                btnContainerAih.style.display = 'block';
+                if (subTitulo) subTitulo.innerText = 'Emissor de Laudo de AIH & Consulta SIGTAP';
+            }
+
+            // Atualiza alerta anti-glosa para o contexto da aba ativa
+            verificarIncompatibilidadeGlosa();
+        }
+
+        // --- SISTEMA DE TEMA ESCURO/CLARO ---
+        function alternarTema() {
+            document.body.classList.toggle('dark-mode');
+            const ehEscuro = document.body.classList.contains('dark-mode');
+            document.getElementById('btnTema').innerText = ehEscuro ? '☀️ Modo Claro' : '🌙 Modo Escuro';
+            localStorage.setItem('clincod_tema', ehEscuro ? 'escuro' : 'claro');
+        }
+
+        if (localStorage.getItem('clincod_tema') === 'escuro' || localStorage.getItem('aih_tema') === 'escuro') {
+            document.body.classList.add('dark-mode');
+            document.getElementById('btnTema').innerText = '☀️ Modo Claro';
+        }
+
+        // --- SISTEMA DE MEMÓRIA LOCAL (LOCALSTORAGE) ---
+        const camposMemoria = [
+            'nomeEstabelecimento', 
+            'cnesEstabelecimento', 
+            'clinica', 
+            'tipoDocumentoProfissional', 
+            'numeroDocProfissional', 
+            'nomeProfissional'
+        ];
+
+        function salvarMemoria() {
+            camposMemoria.forEach(id => {
+                const el = document.getElementById(id);
+                if (el && el.value.trim() !== '') {
+                    localStorage.setItem('clincod_save_' + id, el.value);
+                }
+            });
+        }
+
+        function carregarMemoria() {
+            camposMemoria.forEach(id => {
+                const val = localStorage.getItem('clincod_save_' + id) || localStorage.getItem('aih_save_' + id);
+                const el = document.getElementById(id);
+                if (val && el) el.value = val;
+            });
+            atualizarDropdownPerfisHospital();
+            renderizarHistoricoLaudos();
+        }
+
+        function limparMemoria() {
+            camposMemoria.forEach(id => {
+                localStorage.removeItem('clincod_save_' + id);
+                localStorage.removeItem('aih_save_' + id);
+                const el = document.getElementById(id);
+                if (el) el.value = '';
+            });
+            atualizarDropdownPerfisHospital('padrao');
+            alert('Dados do hospital e do profissional foram apagados deste navegador com sucesso.');
+        }
+
+        // --- SISTEMA DE PERFIS MULTI-HOSPITAL ---
+        function carregarListaPerfisHospital() {
+            try {
+                return JSON.parse(localStorage.getItem('clincod_perfis_hospitais') || '[]');
+            } catch (e) {
+                return [];
+            }
+        }
+
+        function atualizarDropdownPerfisHospital(idSelecionar) {
+            const select = document.getElementById('seletorPerfilHospital');
+            if (!select) return;
+            const perfis = carregarListaPerfisHospital();
+            
+            select.innerHTML = '<option value="padrao">🏥 Unidade Principal (Padrão)</option>';
+            perfis.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p.id;
+                opt.innerText = `🏢 ${p.apelido || p.nome}`;
+                select.appendChild(opt);
+            });
+
+            if (idSelecionar) {
+                select.value = idSelecionar;
+            }
+            const btnDel = document.getElementById('btnExcluirPerfilHosp');
+            if (btnDel) {
+                btnDel.style.display = (select.value === 'padrao') ? 'none' : 'inline-block';
+            }
+        }
+
+        function salvarPerfilHospitalAtual() {
+            const nome = document.getElementById('nomeEstabelecimento').value.trim();
+            const cnes = document.getElementById('cnesEstabelecimento').value.trim();
+            const clinicaEl = document.getElementById('clinica');
+            const clinica = clinicaEl ? clinicaEl.value.trim() : '';
+
+            if (!nome) {
+                alert('Por favor, digite o Nome do Estabelecimento antes de salvar como perfil.');
+                document.getElementById('nomeEstabelecimento').focus();
+                return;
+            }
+
+            const sugestao = nome.length > 25 ? nome.slice(0, 25) + '...' : nome;
+            const apelido = prompt('Digite um apelido para este hospital ou unidade (ex: UPA 24h, Hospital Municipal, Santa Casa):', sugestao);
+            if (!apelido || !apelido.trim()) return;
+
+            let perfis = carregarListaPerfisHospital();
+            const novoId = 'hosp_' + Date.now();
+            const existenteIndex = perfis.findIndex(p => p.apelido.toLowerCase() === apelido.trim().toLowerCase());
+
+            const perfilObj = {
+                id: existenteIndex >= 0 ? perfis[existenteIndex].id : novoId,
+                apelido: apelido.trim(),
+                nome: nome,
+                cnes: cnes,
+                clinica: clinica
+            };
+
+            if (existenteIndex >= 0) {
+                perfis[existenteIndex] = perfilObj;
+            } else {
+                perfis.push(perfilObj);
+            }
+
+            localStorage.setItem('clincod_perfis_hospitais', JSON.stringify(perfis));
+            atualizarDropdownPerfisHospital(perfilObj.id);
+            salvarMemoria();
+            alert(`Perfil "${apelido.trim()}" salvo com sucesso!`);
+        }
+
+        function trocarPerfilHospital(idPerfil) {
+            const btnDel = document.getElementById('btnExcluirPerfilHosp');
+            if (idPerfil === 'padrao') {
+                if (btnDel) btnDel.style.display = 'none';
+                carregarMemoria();
+                return;
+            }
+            const perfis = carregarListaPerfisHospital();
+            const perfil = perfis.find(p => p.id === idPerfil);
+            if (perfil) {
+                document.getElementById('nomeEstabelecimento').value = perfil.nome || '';
+                document.getElementById('cnesEstabelecimento').value = perfil.cnes || '';
+                const clinicaEl = document.getElementById('clinica');
+                if (clinicaEl && perfil.clinica) {
+                    clinicaEl.value = perfil.clinica;
+                }
+                if (btnDel) btnDel.style.display = 'inline-block';
+                salvarMemoria();
+            }
+        }
+
+        function excluirPerfilHospitalAtual() {
+            const select = document.getElementById('seletorPerfilHospital');
+            const id = select.value;
+            if (id === 'padrao') return;
+            const perfis = carregarListaPerfisHospital();
+            const perfil = perfis.find(p => p.id === id);
+            const nomePerfil = perfil ? perfil.apelido : 'este hospital';
+
+            if (confirm(`Deseja realmente remover o perfil salvo "${nomePerfil}"?`)) {
+                const novosPerfis = perfis.filter(p => p.id !== id);
+                localStorage.setItem('clincod_perfis_hospitais', JSON.stringify(novosPerfis));
+                atualizarDropdownPerfisHospital('padrao');
+                carregarMemoria();
+            }
+        }
+
+        // --- SISTEMA PREVENTIVO ANTI-GLOSA (REGRAS SUS) ---
+        function calcularIdadeAnos(dataNascStr) {
+            if (!dataNascStr) return null;
+            const partes = dataNascStr.split('-');
+            if (partes.length !== 3) return null;
+            const ano = parseInt(partes[0], 10);
+            const mes = parseInt(partes[1], 10) - 1;
+            const dia = parseInt(partes[2], 10);
+            const hoje = new Date();
+            let idade = hoje.getFullYear() - ano;
+            const m = hoje.getMonth() - mes;
+            if (m < 0 || (m === 0 && hoje.getDate() < dia)) {
+                idade--;
+            }
+            return idade;
+        }
+
+        function verificarIncompatibilidadeGlosa() {
+            const painelAlerta = document.getElementById('alertaAntiGlosa');
+            if (!painelAlerta) return;
+
+            const sexo = document.getElementById('sexoPaciente') ? document.getElementById('sexoPaciente').value : '';
+            const dataNasc = document.getElementById('dataNascimento') ? document.getElementById('dataNascimento').value : '';
+            const idade = calcularIdadeAnos(dataNasc);
+
+            // Coleta texto do procedimento e CID conforme a aba ativa
+            let procNome = '';
+            let cidNome = '';
+            if (abaAtiva === 'apac') {
+                procNome = document.getElementById('descricaoProcedimentoApac') ? document.getElementById('descricaoProcedimentoApac').value : '';
+                cidNome = (document.getElementById('diagnosticoInicialApac') ? document.getElementById('diagnosticoInicialApac').value : '') + ' ' + 
+                          (document.getElementById('buscaCidPrincipalApac') ? document.getElementById('buscaCidPrincipalApac').value : '');
+            } else {
+                procNome = document.getElementById('descricaoProcedimento') ? document.getElementById('descricaoProcedimento').value : '';
+                cidNome = (document.getElementById('diagnosticoInicial') ? document.getElementById('diagnosticoInicial').value : '') + ' ' + 
+                          (document.getElementById('buscaCidPrincipal') ? document.getElementById('buscaCidPrincipal').value : '');
+            }
+
+            const textoClinico = normalizarTexto(`${procNome} ${cidNome}`);
+            const alertas = [];
+
+            // 1. Regra de Procedimento Ginecológico/Obstétrico x Sexo Masculino
+            const termosFemininos = [
+                'parto', 'cesarian', 'puerperi', 'histerectomi', 'curetagem pos', 'gestant', 'gravid', 
+                'ovari', 'uterin', 'utero', 'vulv', 'vagin', 'colo do utero', 'laqueadur', 'salping', 
+                'mastite', 'hiperemese', 'pre-eclamps', 'eclamps', 'endometri', 'colo uterin'
+            ];
+            if (sexo === 'M') {
+                for (const t of termosFemininos) {
+                    if (textoClinico.includes(t)) {
+                        alertas.push(`<strong>Sexo Incompatível:</strong> O procedimento ou diagnóstico selecionado é tipicamente Ginecológico/Obstétrico, mas o paciente está com sexo <strong>MASCULINO</strong>. Isso costuma gerar glosa automática na regulação.`);
+                        break;
+                    }
+                }
+            }
+
+            // 2. Regra de Urologia Masculina/Próstata x Sexo Feminino
+            const termosMasculinos = [
+                'prostat', 'prostatectomi', 'rtu de prostat', 'orquiectomi', 'orquidopexi', 'criptorquidi', 
+                'postectomi', 'fimose', 'penis', 'penian', 'vasectomi', 'escrot', 'varicocele', 'hidrocele', 'testicul'
+            ];
+            if (sexo === 'F') {
+                for (const t of termosMasculinos) {
+                    if (textoClinico.includes(t)) {
+                        alertas.push(`<strong>Sexo Incompatível:</strong> O procedimento ou diagnóstico selecionado é tipicamente da Urologia Masculina (próstata/pênis/testículo), mas o paciente está com sexo <strong>FEMININO</strong>. Isso causará glosa imediata.`);
+                        break;
+                    }
+                }
+            }
+
+            // 3. Regra de Faixa Etária (Idade x Pediátrico / Obstétrico)
+            if (idade !== null && idade >= 0) {
+                if (idade > 18 && (textoClinico.includes('pediatric') || textoClinico.includes('neonatal') || textoClinico.includes('recem-nascid') || textoClinico.includes('recem nascid'))) {
+                    alertas.push(`<strong>Idade Incompatível:</strong> O procedimento selecionado possui caráter <em>Pediátrico/Neonatal</em>, porém a idade calculada do paciente é de <strong>${idade} anos</strong>.`);
+                }
+                if ((idade < 10 || idade > 60) && (textoClinico.includes('parto') || textoClinico.includes('cesarian'))) {
+                    alertas.push(`<strong>Alerta de Idade no Parto:</strong> Procedimento obstétrico de parto com idade calculada de <strong>${idade} anos</strong>. Verifique se a data de nascimento foi preenchida corretamente.`);
+                }
+            }
+
+            if (alertas.length > 0) {
+                painelAlerta.innerHTML = `<div style="display: flex; gap: 10px; align-items: flex-start;">
+                    <span style="font-size: 22px; line-height: 1;">🛡️</span>
+                    <div>
+                        <div style="font-size: 13.5px; font-weight: 700; margin-bottom: 4px; color: #b45309;">Alerta Preventivo de Auditoria (Anti-Glosa SUS):</div>
+                        ${alertas.map(a => `<div style="margin-top: 3px;">• ${a}</div>`).join('')}
+                    </div>
+                </div>`;
+                painelAlerta.style.display = 'block';
+            } else {
+                painelAlerta.style.display = 'none';
+            }
+        }
+
+        // --- HISTÓRICO DE ÚLTIMOS LAUDOS EMITIDOS ---
+        function carregarHistoricoLaudos() {
+            try {
+                return JSON.parse(localStorage.getItem('clincod_historico_laudos') || '[]');
+            } catch (e) {
+                return [];
+            }
+        }
+
+        function salvarNoHistoricoLaudos(tipo) {
+            try {
+                const paciente = document.getElementById('nomePaciente') ? document.getElementById('nomePaciente').value.trim() : '';
+                const cns = document.getElementById('cnsPaciente') ? document.getElementById('cnsPaciente').value.trim() : '';
+                if (!paciente) return;
+
+                let procedimento = '';
+                let cid = '';
+                if (tipo === 'APAC') {
+                    procedimento = document.getElementById('descricaoProcedimentoApac') ? document.getElementById('descricaoProcedimentoApac').value.trim() : '';
+                    cid = document.getElementById('buscaCidPrincipalApac') ? document.getElementById('buscaCidPrincipalApac').value.trim() : '';
+                } else {
+                    procedimento = document.getElementById('descricaoProcedimento') ? document.getElementById('descricaoProcedimento').value.trim() : '';
+                    cid = document.getElementById('buscaCidPrincipal') ? document.getElementById('buscaCidPrincipal').value.trim() : '';
+                }
+
+                // Captura estado de todos os inputs do formulário
+                const inputs = document.querySelectorAll('#formClinCod input, #formClinCod select, #formClinCod textarea');
+                const formSnapshot = {};
+                inputs.forEach(el => {
+                    if (el.id) formSnapshot[el.id] = el.value;
+                });
+
+                // Captura secundários se houver
+                const secundariosSnapshot = [];
+                for (let i = 1; i <= contadorProcSecApac; i++) {
+                    const d = document.getElementById(`descProcSec${i}`);
+                    const c = document.getElementById(`codProcSec${i}`) || document.getElementById(`buscaCodProcSec${i}`);
+                    const q = document.getElementById(`qtdeProcSec${i}`);
+                    if (d && d.value) {
+                        secundariosSnapshot.push({
+                            descricao: d.value,
+                            codigo: c ? c.value : '',
+                            qtde: q ? q.value : '1'
+                        });
+                    }
+                }
+
+                const agora = new Date();
+                const horaFmt = agora.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' às ' + 
+                               agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+                const item = {
+                    id: 'laudo_' + Date.now(),
+                    tipo: tipo,
+                    hora: horaFmt,
+                    paciente: paciente,
+                    cns: cns,
+                    procedimento: procedimento,
+                    cid: cid,
+                    formSnapshot: formSnapshot,
+                    secundariosSnapshot: secundariosSnapshot
+                };
+
+                let lista = carregarHistoricoLaudos();
+                // Limita a 10 laudos mais recentes
+                lista.unshift(item);
+                if (lista.length > 10) lista = lista.slice(0, 10);
+                localStorage.setItem('clincod_historico_laudos', JSON.stringify(lista));
+
+                renderizarHistoricoLaudos();
+            } catch (err) {
+                console.warn('Erro ao salvar no histórico de laudos:', err);
+            }
+        }
+
+        function renderizarHistoricoLaudos() {
+            const lista = carregarHistoricoLaudos();
+            const badge = document.getElementById('contadorHistorico');
+            const container = document.getElementById('listaHistoricoItens');
+            if (badge) badge.innerText = lista.length;
+            if (!container) return;
+
+            if (lista.length === 0) {
+                container.innerHTML = '<div style="padding: 12px; color: var(--text-muted); font-size: 13px; text-align: center;">Nenhum laudo recente emitido ainda neste navegador.</div>';
+                return;
+            }
+
+            container.innerHTML = '';
+            lista.forEach(item => {
+                const el = document.createElement('div');
+                el.className = 'item-historico';
+                const ehApac = item.tipo === 'APAC';
+                const tagCor = ehApac ? 'background-color:#0d9488;' : 'background-color:#0056b3;';
+                
+                el.innerHTML = `
+                    <div class="item-historico-info">
+                        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                            <span style="${tagCor} color: white; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 4px;">${item.tipo}</span>
+                            <strong style="color: var(--text-main); font-size: 13.5px;">${item.paciente}</strong>
+                            <small style="color: var(--text-muted); font-size: 11px;">(${item.hora})</small>
+                        </div>
+                        <div style="color: var(--text-muted); font-size: 12px; margin-top: 2px;">
+                            ${item.procedimento || 'Procedimento'} ${item.cid ? `— <span style="font-weight:700; color:var(--accent);">${item.cid}</span>` : ''}
+                        </div>
+                    </div>
+                    <button type="button" class="btn-restaurar-hist" onclick="restaurarLaudoDoHistorico('${item.id}')" title="Restaura todos os dados deste laudo no formulário para reimpressão imediata">
+                        🔄 Restaurar Dados
+                    </button>
+                `;
+                container.appendChild(el);
+            });
+        }
+
+        function alternarExibicaoHistorico() {
+            const corpo = document.getElementById('corpoHistorico');
+            const seta = document.getElementById('iconeSetaHistorico');
+            if (!corpo) return;
+            const aberto = corpo.style.display !== 'none';
+            corpo.style.display = aberto ? 'none' : 'block';
+            if (seta) {
+                seta.innerText = aberto ? '▼ Expandir' : '▲ Recolher';
+            }
+        }
+
+        function restaurarLaudoDoHistorico(id) {
+            const lista = carregarHistoricoLaudos();
+            const item = lista.find(l => l.id === id);
+            if (!item) return;
+
+            // Alterna para a aba correspondente
+            alternarAba(item.tipo.toLowerCase());
+
+            // Preenche todos os dados capturados
+            if (item.formSnapshot) {
+                Object.keys(item.formSnapshot).forEach(idCampo => {
+                    const campo = document.getElementById(idCampo);
+                    if (campo) campo.value = item.formSnapshot[idCampo];
+                });
+            }
+
+            // Se tiver procedimentos secundários de APAC, restaura
+            if (item.tipo === 'APAC' && item.secundariosSnapshot && item.secundariosSnapshot.length > 0) {
+                while (contadorProcSecApac > 0) {
+                    removerProcedimentoSecundarioApac();
+                }
+                item.secundariosSnapshot.forEach((sec, idx) => {
+                    adicionarProcedimentoSecundarioApac();
+                    const i = idx + 1;
+                    const d = document.getElementById(`descProcSec${i}`);
+                    const cVis = document.getElementById(`buscaCodProcSec${i}`);
+                    const cEsc = document.getElementById(`codProcSec${i}`);
+                    const q = document.getElementById(`qtdeProcSec${i}`);
+                    if (d) d.value = sec.descricao;
+                    if (cVis) cVis.value = sec.codigo;
+                    if (cEsc) cEsc.value = sec.codigo;
+                    if (q) q.value = sec.qtde;
+                });
+            }
+
+            // Atualiza contadores de caracteres
+            ['sinaisSintomas', 'condicoesInternacao', 'principaisResultados', 'descricaoDiagnosticoApac', 'observacoesApac'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.dispatchEvent(new Event('input'));
+            });
+
+            // Dispara verificação anti-glosa
+            verificarIncompatibilidadeGlosa();
+
+            // Rola suavemente para o topo do formulário
+            document.getElementById('formClinCod').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            alert(`Laudo de ${item.tipo} do paciente "${item.paciente}" restaurado no formulário!`);
+        }
+
+        function limparHistoricoLaudos() {
+            if (confirm('Deseja realmente limpar todo o histórico de laudos recentes deste navegador?')) {
+                localStorage.removeItem('clincod_historico_laudos');
+                renderizarHistoricoLaudos();
+            }
+        }
+
+        // --- CONTADORES DE CARACTERES ---
+        function iniciarContador(idCampo, idContador, max) {
+            const campo = document.getElementById(idCampo);
+            const contador = document.getElementById(idContador);
+            if (!campo || !contador) return;
+            campo.addEventListener('input', () => {
+                const len = campo.value.length;
+                contador.innerText = `${len} / ${max}`;
+                if (len >= max) contador.classList.add('limite');
+                else contador.classList.remove('limite');
+            });
+        }
+
+        iniciarContador('sinaisSintomas', 'cont-sinaisSintomas', 1000);
+        iniciarContador('condicoesInternacao', 'cont-condicoesInternacao', 400);
+        iniciarContador('principaisResultados', 'cont-principaisResultados', 400);
+        iniciarContador('descricaoDiagnosticoApac', 'cont-descricaoDiagnosticoApac', 60);
+        iniciarContador('observacoesApac', 'cont-observacoesApac', 650);
+
+        // --- FUNÇÃO DE NORMALIZAÇÃO (REMOVE ACENTOS E MAIÚSCULAS) ---
+        const normalizarTexto = str => (str || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+        // --- CARREGAMENTO DOS DADOS (LOCAL OFFLINE / GITHUB PAGES) ---
+        async function carregarDados() {
+            try {
+                // Prioridade 1: Carregamento instantâneo via base_dados.js (funciona no duplo clique e offline)
+                if (typeof BANCO_CIDS !== 'undefined' && BANCO_CIDS.length > 0) {
+                    bancoCids = BANCO_CIDS.map(item => ({ codigo: item.c, nome: item.n }));
+                    bancoProcedimentos = BANCO_PROCEDIMENTOS;
+                    bancoProcedimentosApac = (typeof BANCO_PROCEDIMENTOS_APAC !== 'undefined') ? BANCO_PROCEDIMENTOS_APAC : BANCO_PROCEDIMENTOS;
+                    relacoesCidProcedimento = RELACOES_CID;
+                    console.log(`Sucesso! Carregados ${bancoCids.length} CIDs, ${bancoProcedimentos.length} Procedimentos AIH e ${bancoProcedimentosApac.length} Procedimentos APAC.`);
+                    return;
+                }
+            } catch (e) {
+                console.warn("base_dados.js não encontrado, tentando fetch...", e);
+            }
+
+            try {
+                // Prioridade 2: Fallback caso esteja em servidor HTTP
+                const resCid = await fetch('cids_clean.json');
+                const rawCids = await resCid.json();
+                bancoCids = rawCids.map(item => ({ codigo: item.c, nome: item.n }));
+
+                const resProc = await fetch('procedimentos_03_04.json');
+                bancoProcedimentos = await resProc.json();
+                bancoProcedimentosApac = bancoProcedimentos;
+
+                const resRel = await fetch('cid_procedimentos_rel.json');
+                relacoesCidProcedimento = await resRel.json();
+            } catch (err) {
+                console.warn("Erro no fetch secundário:", err);
+            }
+        }
+
+        // --- DICIONÁRIO DE SINÔNIMOS MÉDICOS E SIGLAS CLÍNICAS ---
+        const SINONIMOS_QUALCID = {
+            'sepse': 'A41', 'septicemia': 'A41', 'choque septico': 'A41',
+            'avc': 'I64', 'ave': 'I64', 'derrame': 'I64', 'derrame cerebral': 'I64', 'acidente vascular': 'I64',
+            'infarto': 'I21', 'iam': 'I21', 'ataque cardiaco': 'I21', 'infarto do miocardio': 'I21',
+            'insuficiencia cardiaca': 'I50', 'icc': 'I50', 'ic': 'I50',
+            'pneumonia': 'J18', 'broncopneumonia': 'J18',
+            'apendicite': 'K35', 'apendicite aguda': 'K35',
+            'colecistite': 'K80', 'pedra na vesicula': 'K80', 'calculo vesicular': 'K80', 'vesicula': 'K80',
+            'parto': 'O80', 'parto normal': 'O80', 'parto cesario': 'O82', 'cesariana': 'O82', 'cesarea': 'O82',
+            'fratura de femur': 'S72', 'fratura do femur': 'S72', 'fratura de quadril': 'S72', 'colo de femur': 'S72',
+            'fratura de perna': 'S82', 'fratura de tibia': 'S82',
+            'fratura de braco': 'S42', 'fratura de umero': 'S42', 'fratura de punho': 'S52', 'fratura de radio': 'S52',
+            'fratura de coluna': 'S22',
+            'tce': 'S06', 'traumatismo craniano': 'S06', 'trauma craniano': 'S06',
+            'hernia': 'K40', 'hernia inguinal': 'K40', 'hernia umbilical': 'K42',
+            'covid': 'B342', 'covid19': 'B342', 'covid-19': 'B342', 'coronavirus': 'B342',
+            'diabetes': 'E14', 'diabetes mellitus': 'E14', 'pe diabetico': 'E14',
+            'hipertensao': 'I10', 'has': 'I10', 'pressao alta': 'I10',
+            'asma': 'J45', 'crise asmatica': 'J45',
+            'dpoc': 'J44', 'enfisema': 'J43',
+            'infeccao urinaria': 'N390', 'itu': 'N390',
+            'pielonefrite': 'N10',
+            'insuficiencia renal': 'N17', 'ira': 'N17', 'irc': 'N18',
+            'calculo renal': 'N20', 'pedra nos rins': 'N20', 'colica renal': 'N23', 'litotripsia': 'N20',
+            'prostata': 'N40', 'hpb': 'N40', 'hiperplasia prostatica': 'N40',
+            'dengue': 'A90', 'tuberculose': 'A15', 'epilepsia': 'G40', 'convulsao': 'G40',
+            'catarata': 'H25', 'glaucoma': 'H40', 'queimadura': 'T20',
+            'pancreatite': 'K85', 'cirrose': 'K74', 'hemorragia digestiva': 'K922',
+            'arritmia': 'I49', 'fibrilacao atrial': 'I48', 'fa': 'I48',
+            'celulite': 'L03', 'abscesso': 'L02', 'erisipela': 'A46',
+            'gastrite': 'K29', 'lumbago': 'M54', 'lombalgia': 'M54', 'ciatica': 'M54', 'dor nas costas': 'M54',
+            'diarreia': 'A09', 'gastroenterite': 'A09', 'hipotireoidismo': 'E03', 'hipertireoidismo': 'E05',
+            'sinusite': 'J01', 'otite': 'H65', 'cistite': 'N30', 'amigdalite': 'J03', 'faringite': 'J02',
+            'bronquite': 'J20', 'esofagite': 'K20', 'ulcera': 'K25', 'anemia': 'D50', 'trombose': 'I80', 'tvp': 'I80',
+            'embolia': 'I26', 'tep': 'I26', 'artrose': 'M15', 'artrite': 'M06'
+        };
+
+        // --- FORMATADOR SEGURO DE CÓDIGO DE PROCEDIMENTO (GARANTE SEMPRE 10 DÍGITOS COM PONTOS E TRAÇO) ---
+        function formatarCod(p) {
+            if (!p) return '';
+            const raw = typeof p === 'string' ? p : (p.codigo || '');
+            const digits = String(raw).replace(/\D/g, '').padStart(10, '0');
+            if (digits.length === 10) {
+                return `${digits.slice(0, 2)}.${digits.slice(2, 4)}.${digits.slice(4, 6)}.${digits.slice(6, 9)}-${digits.slice(9, 10)}`;
+            }
+            if (p.formatado && p.formatado.length > 5 && !p.formatado.includes('..')) {
+                return p.formatado;
+            }
+            return raw;
+        }
+
+        // --- FORMATADOR DE CÓDIGO CID (EX: I500 -> I50.0, I64X -> I64) ---
+        function formatarCid(c) {
+            if (!c) return '';
+            const clean = c.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+            if (clean.length === 4) {
+                if (clean.endsWith('X')) return clean.slice(0, 3);
+                return `${clean.slice(0, 3)}.${clean.slice(3)}`;
+            }
+            return clean;
+        }
+
+        // --- SELEÇÃO DE PROCEDIMENTO (AUTOCOMPLETE INFERIOR -> FORMULÁRIO) ---
+        function selecionarProcedimento(proc) {
+            const desc = document.getElementById('descricaoProcedimento');
+            const codVisivel = document.getElementById('buscaCodigoProcedimento');
+            const codEscondido = document.getElementById('codigoProcedimento');
+
+            desc.value = proc.nome;
+            codVisivel.value = formatarCod(proc);
+            codEscondido.value = String(proc.codigo).replace(/\D/g, '').padStart(10, '0');
+
+            desc.classList.remove('campo-invalido');
+            codVisivel.classList.remove('campo-invalido');
+            desc.classList.add('campo-selecionado');
+            codVisivel.classList.add('campo-selecionado');
+
+            setTimeout(() => {
+                desc.classList.remove('campo-selecionado');
+                codVisivel.classList.remove('campo-selecionado');
+            }, 1500);
+
+            // Fecha dropdowns
+            document.getElementById('listaDescricaoProcedimento').innerHTML = '';
+            document.getElementById('listaCodigoProcedimento').innerHTML = '';
+
+            // Dispara verificação preventiva anti-glosa
+            verificarIncompatibilidadeGlosa();
+        }
+
+        // --- BUSCA QUALCID COMPLETA, INTELIGENTE E VISUAL ---
+        function executarBuscaQualCid(termo) {
+            const card = document.getElementById('qualcidResultadosCard');
+            const lista = document.getElementById('qualcidListaProcs');
+            const abas = document.getElementById('qualcidAbasDoencas');
+            const textoDoenca = document.getElementById('qualcidDoencaTexto');
+            const contador = document.getElementById('qualcidContadorProcs');
+            const aviso = document.getElementById('avisoSucessoQualCid');
+            if (aviso) aviso.style.display = 'none';
+
+            if (!termo || termo.trim().length < 2) {
+                if (card) card.style.display = 'none';
+                return;
+            }
+
+            const q = normalizarTexto(termo.trim());
+            const qClean = q.replace(/[^a-z0-9]/g, '');
+
+            // 1. VERIFICA SE O USUÁRIO DIGITOU DIRETAMENTE UM PROCEDIMENTO OU CÓDIGO SIGTAP
+            const procsDiretos = bancoProcedimentos.filter(p => {
+                const cMatch = p.codigo.replace(/\D/g, '').includes(qClean);
+                const nMatch = normalizarTexto(p.nome).includes(q);
+                return cMatch || nMatch;
+            }).slice(0, 30);
+
+            // 2. BUSCA DE DOENÇAS / CIDs
+            let cidsCompativeis = [];
+
+            // A. Verifica sinônimo médico direto (ex: 'sepse' -> A41, 'avc' -> I64, 'infarto' -> I21, 'lumbago' -> M54)
+            if (SINONIMOS_QUALCID[q]) {
+                const sinCod = SINONIMOS_QUALCID[q];
+                const sinCids = bancoCids.filter(c => c.codigo.startsWith(sinCod));
+                cidsCompativeis.push(...sinCids);
+            }
+
+            // B. Busca por código CID exato ou prefixo
+            const porCodigo = bancoCids.filter(c => 
+                normalizarTexto(c.codigo).startsWith(qClean) ||
+                normalizarTexto(c.codigo).replace(/[^a-z0-9]/g, '').startsWith(qClean)
+            ).slice(0, 12);
+            porCodigo.forEach(c => {
+                if (!cidsCompativeis.some(x => x.codigo === c.codigo)) cidsCompativeis.push(c);
+            });
+
+            // C. Busca por palavra inteira no nome da patologia (ex: evita casar 'asma' com 'mycoplasma')
+            try {
+                const regexPalavra = new RegExp('\\b' + q, 'i');
+                const porPalavra = bancoCids.filter(c => regexPalavra.test(normalizarTexto(c.nome))).slice(0, 15);
+                porPalavra.forEach(c => {
+                    if (!cidsCompativeis.some(x => x.codigo === c.codigo)) cidsCompativeis.push(c);
+                });
+            } catch (e) {
+                // Em caso de caractere especial no regex
+            }
+
+            // D. Fallback para substring geral somente se ainda não achou nada
+            if (cidsCompativeis.length === 0) {
+                const porNomeContem = bancoCids.filter(c => normalizarTexto(c.nome).includes(q)).slice(0, 15);
+                porNomeContem.forEach(c => {
+                    if (!cidsCompativeis.some(x => x.codigo === c.codigo)) cidsCompativeis.push(c);
+                });
+            }
+
+            // Se for procedimento digitado diretamente e nenhuma doença bateu
+            if (cidsCompativeis.length === 0 && procsDiretos.length > 0) {
+                card.style.display = 'block';
+                if (abas) abas.style.display = 'none';
+                textoDoenca.innerHTML = `🩺 Busca por Procedimento: <strong>"${termo}"</strong>`;
+                contador.innerText = `${procsDiretos.length} procedimentos hospitalares`;
+                renderizarListaProcedimentos(procsDiretos, 'Procedimento Solicitado', '');
+                return;
+            }
+
+            if (cidsCompativeis.length === 0) {
+                card.style.display = 'block';
+                if (abas) abas.style.display = 'none';
+                textoDoenca.innerText = `Nenhuma doença encontrada para "${termo}".`;
+                contador.innerText = '0 procedimentos hospitalares';
+                lista.innerHTML = '<div style="padding: 12px; color: var(--text-muted); font-size: 13px;">Tente pesquisar por patologias como "insuficiência cardíaca", "pneumonia", "apendicite", "infarto", "fratura", "sepse", "avc", ou código como "I50", "J18", "K35".</div>';
+                return;
+            }
+
+            card.style.display = 'block';
+
+            // Monta abas de seleção interativa caso existam múltiplas doenças encontradas
+            if (abas) {
+                if (cidsCompativeis.length > 1) {
+                    abas.style.display = 'flex';
+                    abas.innerHTML = '';
+                    cidsCompativeis.slice(0, 6).forEach((cid, idx) => {
+                        const pill = document.createElement('button');
+                        pill.type = 'button';
+                        pill.className = `qualcid-pill-doenca ${idx === 0 ? 'ativo' : ''}`;
+                        pill.innerHTML = `<strong>${formatarCid(cid.codigo)}</strong> ${cid.nome.slice(0, 30)}${cid.nome.length > 30 ? '...' : ''}`;
+                        pill.onclick = () => {
+                            document.querySelectorAll('.qualcid-pill-doenca').forEach(b => b.classList.remove('ativo'));
+                            pill.classList.add('ativo');
+                            carregarProcedimentosParaCid(cid);
+                        };
+                        abas.appendChild(pill);
+                    });
+                } else {
+                    abas.style.display = 'none';
+                }
+            }
+
+            // Exibe imediatamente os procedimentos da primeira doença encontrada
+            carregarProcedimentosParaCid(cidsCompativeis[0]);
+        }
+
+        // --- CARREGA PROCEDIMENTOS COMPATÍVEIS PARA O CID SELECIONADO ---
+        function carregarProcedimentosParaCid(cidAlvo) {
+            const textoDoenca = document.getElementById('qualcidDoencaTexto');
+            const contador = document.getElementById('qualcidContadorProcs');
+
+            const codigoLimpo = cidAlvo.codigo.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+            const raiz4 = codigoLimpo.substring(0, 4);
+            const raiz3 = codigoLimpo.substring(0, 3);
+
+            let procs = relacoesCidProcedimento[codigoLimpo] || 
+                        relacoesCidProcedimento[raiz4] || 
+                        relacoesCidProcedimento[raiz3] || [];
+
+            // Fallback semântico inteligente se não houver relação direta estática
+            if (procs.length === 0) {
+                const stopWords = new Set(['para', 'como', 'com', 'sem', 'por', 'dos', 'das', 'uma', 'outro', 'outras', 'outros', 'devida', 'devido', 'aguda', 'agudo', 'cronica', 'cronico', 'especificada', 'especificado', 'nao', 'devidas', 'devidos', 'geral', 'localizacao']);
+                const palavrasChave = normalizarTexto(cidAlvo.nome)
+                    .split(/[^a-z0-9]+/)
+                    .filter(w => w.length > 3 && !stopWords.has(w));
+
+                if (palavrasChave.length > 0) {
+                    procs = bancoProcedimentos.filter(p => {
+                        const pNome = normalizarTexto(p.nome);
+                        return palavrasChave.some(kw => pNome.includes(kw));
+                    }).slice(0, 15);
+                }
+            }
+
+            // Fallback para procedimentos de internação e suporte clínico geral
+            if (procs.length === 0) {
+                procs = bancoProcedimentos.filter(p => p.codigo === '0301050074' || p.codigo === '0303010037' || p.codigo === '0303060107');
+            }
+
+            textoDoenca.innerHTML = `📘 <strong>${formatarCid(cidAlvo.codigo)}</strong> — ${cidAlvo.nome}`;
+            contador.innerText = `${procs.length} procedimentos hospitalares`;
+            renderizarListaProcedimentos(procs, cidAlvo.nome, formatarCid(cidAlvo.codigo));
+        }
+
+        // --- RENDERIZAÇÃO VISUAL DA LISTA DE PROCEDIMENTOS (COM CÓDIGO COMPLETO, PONTO E BOTÃO) ---
+        function renderizarListaProcedimentos(procs, diagNome, cidCodigo) {
+            const lista = document.getElementById('qualcidListaProcs');
+            lista.innerHTML = '';
+
+            if (procs.length === 0) {
+                lista.innerHTML = '<div style="padding: 12px; color: var(--text-muted); font-size: 13px;">Nenhum procedimento hospitalar associado a este CID. Você pode pesquisar o procedimento diretamente no campo de busca acima.</div>';
+                return;
+            }
+
+            procs.forEach(p => {
+                const linha = document.createElement('div');
+                linha.className = 'qualcid-linha-proc';
+                const is04 = p.codigo.startsWith('04');
+                const badge = is04 
+                    ? '<span class="qualcid-badge-grupo qualcid-badge-04">Cirúrgico</span>' 
+                    : '<span class="qualcid-badge-grupo qualcid-badge-03">Clínico</span>';
+                const codFmt = formatarCod(p);
+
+                linha.innerHTML = `
+                    <div class="qualcid-proc-conteudo">
+                        <span class="qualcid-bullet">●</span>
+                        <span class="qualcid-cod-proc">${codFmt}</span>
+                        ${badge}
+                        <span class="qualcid-nome-proc">${p.nome}</span>
+                    </div>
+                    <button type="button" class="qualcid-btn-usar">✔ Usar no Laudo ➔</button>
+                `;
+                linha.onclick = () => selecionarProcedimentoParaAih(p, cidCodigo, diagNome);
+                lista.appendChild(linha);
+            });
+        }
+
+        // --- APLICAÇÃO DOS DADOS DO CLINCOD DIRETO NO LAUDO DE AIH ---
+        function selecionarProcedimentoParaAih(proc, cidCodigo, cidNome) {
+            const codFmt = formatarCod(proc);
+            const codDigitos = String(proc.codigo || '').replace(/\D/g, '').padStart(10, '0');
+
+            if (cidNome && cidNome !== 'Procedimento Solicitado') {
+                document.getElementById('diagnosticoInicial').value = cidNome;
+            }
+            if (cidCodigo) {
+                document.getElementById('buscaCidPrincipal').value = formatarCid(cidCodigo);
+                document.getElementById('cidPrincipal').value = formatarCid(cidCodigo);
+            }
+            document.getElementById('descricaoProcedimento').value = proc.nome;
+            document.getElementById('buscaCodigoProcedimento').value = codFmt;
+            document.getElementById('codigoProcedimento').value = codDigitos;
+
+            const aviso = document.getElementById('avisoSucessoQualCid');
+            if (aviso) {
+                aviso.style.display = 'block';
+                aviso.innerHTML = `✔ <strong>Procedimento Selecionado:</strong> <code>${codFmt}</code> — ${proc.nome} (Aplicado no Laudo com sucesso!)`;
+            }
+
+            // Destaque visual nos campos preenchidos
+            ['diagnosticoInicial', 'buscaCidPrincipal', 'descricaoProcedimento', 'buscaCodigoProcedimento'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.classList.add('campo-selecionado');
+                    el.classList.remove('campo-invalido');
+                    setTimeout(() => el.classList.remove('campo-selecionado'), 2000);
+                }
+            });
+
+            // Rola suavemente até os campos preenchidos
+            document.getElementById('diagnosticoInicial').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        function atualizarQualCidBox(codigo, nome) {
+            const campo = document.getElementById('campoBuscaQualCid');
+            if (campo) campo.value = `${formatarCid(codigo)} - ${nome}`;
+            executarBuscaQualCid(codigo);
+        }
+
+        function aplicarExemplo(termo) {
+            const campo = document.getElementById('campoBuscaQualCid');
+            if (campo) campo.value = termo;
+            executarBuscaQualCid(termo);
+        }
+
+        // ========================================================
+        // --- MOTOR DE BUSCA: LAUDO DE APAC (EXAMES & ALTO CUSTO) ---
+        // ========================================================
+        function getBadgeApac(p) {
+            const cod = p.codigo || p.c || '';
+            const g = (p.g || cod.slice(0, 2));
+            if (g === '02') return '<span class="qualcid-badge-grupo qualcid-badge-02">Exame / Diagnóstico</span>';
+            if (g === '03') return '<span class="qualcid-badge-grupo qualcid-badge-03">Alta Complexidade</span>';
+            if (g === '06') return '<span class="qualcid-badge-grupo qualcid-badge-06">Medicamento Especializado</span>';
+            if (g === '07') return '<span class="qualcid-badge-grupo qualcid-badge-07">Órtese / Prótese</span>';
+            if (g === '04') return '<span class="qualcid-badge-grupo qualcid-badge-04">Cirúrgico</span>';
+            return '<span class="qualcid-badge-grupo qualcid-badge-02">Procedimento APAC</span>';
+        }
+
+        function executarBuscaApac(termo) {
+            const card = document.getElementById('apacResultadosCard');
+            const lista = document.getElementById('apacListaProcs');
+            const textoDoenca = document.getElementById('apacDoencaTexto');
+            const contador = document.getElementById('apacContadorProcs');
+            const aviso = document.getElementById('avisoSucessoApac');
+            if (aviso) aviso.style.display = 'none';
+
+            if (!termo || termo.trim().length < 2) {
+                if (card) card.style.display = 'none';
+                return;
+            }
+
+            const q = normalizarTexto(termo.trim());
+            const termosBusca = q.split(/\s+/).filter(t => t.length > 0);
+            const qClean = q.replace(/[^a-z0-9]/g, '');
+
+            card.style.display = 'block';
+
+            // Busca no catálogo de procedimentos APAC (prioriza Grupo 02 - Exames)
+            const resultados = bancoProcedimentosApac.filter(p => {
+                const cod = (p.codigo || p.c || '').replace(/\D/g, '');
+                const nomeNorm = normalizarTexto(p.nome || p.n);
+                const matchCod = cod.includes(qClean);
+                const matchNome = termosBusca.every(t => nomeNorm.includes(t));
+                return matchCod || matchNome;
+            });
+
+            // Ordena colocando Grupo 02 (Exames) primeiro
+            resultados.sort((a, b) => {
+                const ca = a.codigo || a.c || '';
+                const cb = b.codigo || b.c || '';
+                const aIs02 = ca.startsWith('02') ? 0 : 1;
+                const bIs02 = cb.startsWith('02') ? 0 : 1;
+                return aIs02 - bIs02;
+            });
+
+            const topResultados = resultados.slice(0, 30);
+
+            if (topResultados.length === 0) {
+                textoDoenca.innerText = `Nenhum exame encontrado para "${termo}".`;
+                contador.innerText = '0 exames';
+                lista.innerHTML = '<div style="padding: 12px; color: var(--text-muted); font-size: 13px;">Tente pesquisar por termos como "tomografia", "ressonancia", "cintilografia", "cateterismo", "biopsia", "hemodialise", "endoscopia" ou pelo código SIGTAP.</div>';
+                return;
+            }
+
+            textoDoenca.innerHTML = `🔬 Busca: <strong>"${termo}"</strong>`;
+            contador.innerText = `${resultados.length} procedimentos / exames`;
+            renderizarListaProcedimentosApac(topResultados);
+        }
+
+        function renderizarListaProcedimentosApac(procs) {
+            const lista = document.getElementById('apacListaProcs');
+            lista.innerHTML = '';
+
+            procs.forEach(p => {
+                const cod = p.codigo || p.c;
+                const nome = p.nome || p.n;
+                const linha = document.createElement('div');
+                linha.className = 'qualcid-linha-proc';
+                const badge = getBadgeApac(p);
+                const codFmt = formatarCod(cod);
+
+                linha.innerHTML = `
+                    <div class="qualcid-proc-conteudo">
+                        <span class="qualcid-bullet">●</span>
+                        <span class="qualcid-cod-proc">${codFmt}</span>
+                        ${badge}
+                        <span class="qualcid-nome-proc">${nome}</span>
+                    </div>
+                    <button type="button" class="qualcid-btn-usar">✔ Usar no Laudo ➔</button>
+                `;
+                linha.onclick = () => selecionarProcedimentoParaApac({ codigo: cod, nome: nome });
+                lista.appendChild(linha);
+            });
+        }
+
+        function selecionarProcedimentoParaApac(proc) {
+            const codFmt = formatarCod(proc);
+            const codDigitos = String(proc.codigo || '').replace(/\D/g, '').padStart(10, '0');
+
+            document.getElementById('descricaoProcedimentoApac').value = proc.nome;
+            document.getElementById('buscaCodigoProcedimentoApac').value = codFmt;
+            document.getElementById('codigoProcedimentoApac').value = codDigitos;
+            document.getElementById('qtdeProcedimentoApac').value = '1';
+
+            const aviso = document.getElementById('avisoSucessoApac');
+            if (aviso) {
+                aviso.style.display = 'block';
+                aviso.innerHTML = `✔ <strong>Exame Selecionado:</strong> <code>${codFmt}</code> — ${proc.nome} (Aplicado no Laudo com sucesso!)`;
+            }
+
+            ['descricaoProcedimentoApac', 'buscaCodigoProcedimentoApac'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.classList.add('campo-selecionado');
+                    el.classList.remove('campo-invalido');
+                    setTimeout(() => el.classList.remove('campo-selecionado'), 2000);
+                }
+            });
+
+            document.getElementById('descricaoProcedimentoApac').scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+            // Dispara verificação preventiva anti-glosa
+            verificarIncompatibilidadeGlosa();
+        }
+
+        function aplicarExemploApac(termo) {
+            const campo = document.getElementById('campoBuscaApac');
+            if (campo) campo.value = termo;
+            executarBuscaApac(termo);
+        }
+
+        // --- PROCEDIMENTOS SECUNDÁRIOS DINÂMICOS (APAC) ---
+        function adicionarProcedimentoSecundarioApac() {
+            if (contadorProcSecApac >= 5) return;
+            contadorProcSecApac++;
+
+            const container = document.getElementById('containerProcedimentosSecundariosApac');
+            const div = document.createElement('div');
+            div.className = 'bloco-secundario';
+            div.id = `blocoProcSecApac${contadorProcSecApac}`;
+
+            div.innerHTML = `
+                <div style="font-weight: 700; font-size: 13px; color: var(--teal); margin-bottom: 8px;">
+                    Exame / Procedimento Secundário #${contadorProcSecApac}
+                </div>
+                <label for="descProcSec${contadorProcSecApac}">Descrição do Procedimento Secundário: *</label>
+                <div class="autocomplete-container">
+                    <input type="text" id="descProcSec${contadorProcSecApac}" placeholder="Digite o nome ou código..." autocomplete="off">
+                    <div id="listaDescProcSec${contadorProcSecApac}" class="autocomplete-items"></div>
+                </div>
+
+                <div style="display: flex; gap: 12px; margin-top: 8px; flex-wrap: wrap;">
+                    <div style="flex: 3; min-width: 180px;">
+                        <label for="buscaCodProcSec${contadorProcSecApac}">Código SIGTAP: *</label>
+                        <div class="autocomplete-container">
+                            <input type="text" id="buscaCodProcSec${contadorProcSecApac}" placeholder="Código..." autocomplete="off">
+                            <div id="listaCodProcSec${contadorProcSecApac}" class="autocomplete-items"></div>
+                        </div>
+                        <input type="hidden" id="codProcSec${contadorProcSecApac}">
+                    </div>
+                    <div style="flex: 1; min-width: 90px;">
+                        <label for="qtdeProcSec${contadorProcSecApac}">Quantidade: *</label>
+                        <input type="number" id="qtdeProcSec${contadorProcSecApac}" min="1" max="99" value="1">
+                    </div>
+                </div>
+            `;
+
+            container.appendChild(div);
+            ativarBuscadorSecundarioApac(contadorProcSecApac);
+
+            document.getElementById('btnRemoverProcSecApac').style.display = 'block';
+            if (contadorProcSecApac === 5) {
+                document.getElementById('btnAdicionarProcSecApac').style.display = 'none';
+            }
+        }
+
+        function removerProcedimentoSecundarioApac() {
+            if (contadorProcSecApac > 0) {
+                const el = document.getElementById(`blocoProcSecApac${contadorProcSecApac}`);
+                if (el) el.remove();
+                contadorProcSecApac--;
+
+                document.getElementById('btnAdicionarProcSecApac').style.display = 'block';
+                if (contadorProcSecApac === 0) {
+                    document.getElementById('btnRemoverProcSecApac').style.display = 'none';
+                }
+            }
+        }
+
+        function ativarBuscadorSecundarioApac(index) {
+            const idDesc = `descProcSec${index}`;
+            const idListaDesc = `listaDescProcSec${index}`;
+            const idCodVisivel = `buscaCodProcSec${index}`;
+            const idListaCod = `listaCodProcSec${index}`;
+            const idCodEscondido = `codProcSec${index}`;
+
+            function bindInput(idCampo, idLista) {
+                const campo = document.getElementById(idCampo);
+                const lista = document.getElementById(idLista);
+                const campoDesc = document.getElementById(idDesc);
+                const campoCodVis = document.getElementById(idCodVisivel);
+                const campoCodEsc = document.getElementById(idCodEscondido);
+
+                campo.addEventListener('input', function() {
+                    const termo = this.value.trim();
+                    lista.innerHTML = '';
+                    campoCodEsc.value = '';
+                    if (termo.length < 2) return;
+
+                    const q = normalizarTexto(termo);
+                    const tokens = q.split(/\s+/).filter(t => t.length > 0);
+                    const qClean = q.replace(/[^a-z0-9]/g, '');
+
+                    const res = bancoProcedimentosApac.filter(p => {
+                        const c = (p.codigo || p.c || '').replace(/\D/g, '');
+                        const n = normalizarTexto(p.nome || p.n);
+                        const matchCod = qClean.length >= 2 && c.includes(qClean);
+                        const matchNome = tokens.every(t => n.includes(t));
+                        return matchCod || matchNome;
+                    }).slice(0, 20);
+
+                    res.forEach(p => {
+                        const item = document.createElement('div');
+                        const codFmt = formatarCod(p);
+                        const nome = p.nome || p.n;
+                        item.innerHTML = `<strong>${codFmt}</strong> - ${nome}`;
+                        item.addEventListener('click', () => {
+                            campoDesc.value = nome;
+                            campoCodVis.value = codFmt;
+                            campoCodEsc.value = String(p.codigo || p.c).replace(/\D/g, '').padStart(10, '0');
+                            lista.innerHTML = '';
+                            document.getElementById(idListaDesc).innerHTML = '';
+                            document.getElementById(idListaCod).innerHTML = '';
+                        });
+                        lista.appendChild(item);
+                    });
+                });
+            }
+
+            bindInput(idDesc, idListaDesc);
+            bindInput(idCodVisivel, idListaCod);
+        }
+
+        // --- AUTOCOMPLETE SINCRONIZADO: DIAGNÓSTICO E CID ---
+        function iniciarAutocompleteCid() {
+            const campoDiag = document.getElementById('diagnosticoInicial');
+            const listaDiag = document.getElementById('listaDiagnostico');
+            const campoCidVisivel = document.getElementById('buscaCidPrincipal');
+            const listaCid = document.getElementById('listaCidPrincipal');
+            const campoCidEscondido = document.getElementById('cidPrincipal');
+
+            function buscar(termo, listaDestino, ehBuscaCid) {
+                listaDestino.innerHTML = '';
+                if (!termo || termo.length < 2) return;
+
+                const q = normalizarTexto(termo);
+                const resultados = bancoCids.filter(cid => 
+                    normalizarTexto(cid.codigo).includes(q) || 
+                    normalizarTexto(cid.nome).includes(q)
+                ).slice(0, 30);
+
+                resultados.forEach(cid => {
+                    const item = document.createElement('div');
+                    item.innerHTML = `<strong>${formatarCid(cid.codigo)}</strong> - ${cid.nome}`;
+                    
+                    item.addEventListener('click', () => {
+                        campoDiag.value = cid.nome;
+                        campoCidVisivel.value = formatarCid(cid.codigo);
+                        campoCidEscondido.value = formatarCid(cid.codigo);
+
+                        campoDiag.classList.remove('campo-invalido');
+                        campoCidVisivel.classList.remove('campo-invalido');
+
+                        listaDiag.innerHTML = '';
+                        listaCid.innerHTML = '';
+
+                        // Dispara a inteligência do QualCID filtrando 03 e 04!
+                        atualizarQualCidBox(cid.codigo, cid.nome);
+                    });
+
+                    listaDestino.appendChild(item);
+                });
+            }
+
+            campoDiag.addEventListener('input', function() {
+                buscar(this.value, listaDiag, false);
+            });
+
+            campoCidVisivel.addEventListener('input', function() {
+                buscar(this.value, listaCid, true);
+            });
+        }
+
+        // --- AUTOCOMPLETE EXCLUSIVO 03 E 04 PARA PROCEDIMENTOS ---
+        function iniciarAutocompleteProcedimentos() {
+            const desc = document.getElementById('descricaoProcedimento');
+            const listaDesc = document.getElementById('listaDescricaoProcedimento');
+            const codVis = document.getElementById('buscaCodigoProcedimento');
+            const listaCod = document.getElementById('listaCodigoProcedimento');
+
+            function buscar(termo, listaDestino) {
+                listaDestino.innerHTML = '';
+                if (!termo || termo.length < 2) return;
+
+                const q = normalizarTexto(termo);
+                const tokens = q.split(/\s+/).filter(t => t.length > 0);
+                const qClean = termo.toLowerCase().replace(/[^a-z0-9]/g, '');
+                const resultados = bancoProcedimentos.filter(p => {
+                    const cMatch = qClean.length >= 2 && p.codigo.replace(/\D/g, '').includes(qClean);
+                    const nMatch = tokens.every(t => normalizarTexto(p.nome).includes(t));
+                    return cMatch || nMatch;
+                }).slice(0, 30);
+
+                resultados.forEach(proc => {
+                    const item = document.createElement('div');
+                    const is04 = proc.codigo.startsWith('04');
+                    const grupoLabel = is04 ? '[04 Cirúrgico]' : '[03 Clínico]';
+                    item.innerHTML = `<strong>${formatarCod(proc)}</strong> <small style="color:var(--text-muted)">${grupoLabel}</small> - ${proc.nome}`;
+
+                    item.addEventListener('click', () => selecionarProcedimento(proc));
+                    listaDestino.appendChild(item);
+                });
+            }
+
+            desc.addEventListener('input', function() { buscar(this.value, listaDesc); });
+        }
+
+        // --- AUTOCOMPLETE SINCRONIZADO PARA APAC: DIAGNÓSTICO E CID ---
+        function iniciarAutocompleteCidApac() {
+            const campoDiag = document.getElementById('diagnosticoInicialApac');
+            const campoCidVisivel = document.getElementById('buscaCidPrincipalApac');
+            const campoCidEscondido = document.getElementById('cidPrincipalApac');
+
+            let listaDiag = document.getElementById('listaDiagnosticoApac');
+            if (!listaDiag) {
+                listaDiag = document.createElement('div');
+                listaDiag.id = 'listaDiagnosticoApac';
+                listaDiag.className = 'autocomplete-items';
+                campoDiag.parentNode.style.position = 'relative';
+                campoDiag.parentNode.appendChild(listaDiag);
+            }
+
+            let listaCid = document.getElementById('listaCidPrincipalApac');
+            if (!listaCid) {
+                listaCid = document.createElement('div');
+                listaCid.id = 'listaCidPrincipalApac';
+                listaCid.className = 'autocomplete-items';
+                campoCidVisivel.parentNode.style.position = 'relative';
+                campoCidVisivel.parentNode.appendChild(listaCid);
+            }
+
+            function buscar(termo, listaDestino) {
+                listaDestino.innerHTML = '';
+                if (!termo || termo.length < 2) return;
+                const q = normalizarTexto(termo);
+                const resultados = bancoCids.filter(cid => 
+                    normalizarTexto(cid.codigo).includes(q) || 
+                    normalizarTexto(cid.nome).includes(q)
+                ).slice(0, 30);
+
+                resultados.forEach(cid => {
+                    const item = document.createElement('div');
+                    item.innerHTML = `<strong>${formatarCid(cid.codigo)}</strong> - ${cid.nome}`;
+                    item.addEventListener('click', () => {
+                        campoDiag.value = cid.nome;
+                        campoCidVisivel.value = formatarCid(cid.codigo);
+                        campoCidEscondido.value = formatarCid(cid.codigo);
+                        campoDiag.classList.remove('campo-invalido');
+                        campoCidVisivel.classList.remove('campo-invalido');
+                        listaDiag.innerHTML = '';
+                        listaCid.innerHTML = '';
+                    });
+                    listaDestino.appendChild(item);
+                });
+            }
+
+            campoDiag.addEventListener('input', function() { buscar(this.value, listaDiag); });
+            campoCidVisivel.addEventListener('input', function() { buscar(this.value, listaCid); });
+        }
+
+        // --- AUTOCOMPLETE PARA PROCEDIMENTO PRINCIPAL DA APAC ---
+        function iniciarAutocompleteProcedimentosApac() {
+            const desc = document.getElementById('descricaoProcedimentoApac');
+            const codVis = document.getElementById('buscaCodigoProcedimentoApac');
+            const codEsc = document.getElementById('codigoProcedimentoApac');
+
+            let listaDesc = document.getElementById('listaDescricaoProcedimentoApac');
+            if (!listaDesc) {
+                listaDesc = document.createElement('div');
+                listaDesc.id = 'listaDescricaoProcedimentoApac';
+                listaDesc.className = 'autocomplete-items';
+                desc.parentNode.style.position = 'relative';
+                desc.parentNode.appendChild(listaDesc);
+            }
+
+            let listaCod = document.getElementById('listaCodigoProcedimentoApac');
+            if (!listaCod) {
+                listaCod = document.createElement('div');
+                listaCod.id = 'listaCodigoProcedimentoApac';
+                listaCod.className = 'autocomplete-items';
+                codVis.parentNode.style.position = 'relative';
+                codVis.parentNode.appendChild(listaCod);
+            }
+
+            function buscar(termo, listaDestino) {
+                listaDestino.innerHTML = '';
+                if (!termo || termo.length < 2) return;
+                const q = normalizarTexto(termo);
+                const tokens = q.split(/\s+/).filter(t => t.length > 0);
+                const qClean = q.replace(/[^a-z0-9]/g, '');
+
+                const resultados = bancoProcedimentosApac.filter(proc => {
+                    const c = (proc.codigo || proc.c || '').replace(/\D/g, '');
+                    const n = normalizarTexto(proc.nome || proc.n);
+                    const matchCod = qClean.length >= 2 && c.includes(qClean);
+                    const matchNome = tokens.every(t => n.includes(t));
+                    return matchCod || matchNome;
+                }).slice(0, 30);
+
+                resultados.forEach(proc => {
+                    const item = document.createElement('div');
+                    const codFmt = formatarCod(proc);
+                    const nome = proc.nome || proc.n;
+                    item.innerHTML = `<strong>${codFmt}</strong> - ${nome}`;
+                    item.addEventListener('click', () => {
+                        desc.value = nome;
+                        codVis.value = codFmt;
+                        codEsc.value = String(proc.codigo || proc.c).replace(/\D/g, '').padStart(10, '0');
+                        desc.classList.remove('campo-invalido');
+                        codVis.classList.remove('campo-invalido');
+                        listaDesc.innerHTML = '';
+                        listaCod.innerHTML = '';
+                    });
+                    listaDestino.appendChild(item);
+                });
+            }
+
+            desc.addEventListener('input', function() { buscar(this.value, listaDesc); });
+            codVis.addEventListener('input', function() { buscar(this.value, listaCod); });
+        }
+
+        // Fechar menus ao clicar fora
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.autocomplete-container')) {
+                ['listaDiagnostico', 'listaCidPrincipal', 'listaDescricaoProcedimento', 'listaCodigoProcedimento', 'listaDiagnosticoApac', 'listaCidPrincipalApac', 'listaDescricaoProcedimentoApac', 'listaCodigoProcedimentoApac'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.innerHTML = '';
+                });
+            }
+        });
+
+        // --- FUNÇÃO AUXILIAR DE IMPRESSÃO ESPAÇADA NOS QUADRADINHOS ---
+        function imprimirTextoEspacado(texto, config, pagina) {
+            if (!texto) return;
+            const str = String(texto).toUpperCase().replace(/[^A-Z0-9]/g, '');
+            for (let i = 0; i < str.length; i++) {
+                const char = str[i];
+                const posX = config.x + (i * config.espacamento);
+                pagina.drawText(char, { x: posX, y: config.y, size: config.tamanho });
+            }
+        }
+
+        // --- GERAÇÃO DO PDF DA AIH ---
+        async function gerarAihPdf(modo = 'download') {
+            const divErro = document.getElementById('mensagemErro');
+            divErro.style.display = 'none';
+
+            function erro(elemId, msg) {
+                const el = document.getElementById(elemId);
+                divErro.innerText = msg;
+                divErro.style.display = 'block';
+                el.classList.add('campo-invalido');
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                el.focus();
+            }
+
+            // Limpa marcações de erro anteriores
+            document.querySelectorAll('.campo-invalido').forEach(el => el.classList.remove('campo-invalido'));
+
+            // Validações obrigatórias
+            const obrigatorios = [
+                { id: 'nomeEstabelecimento', nome: 'Nome do Estabelecimento Solicitante' },
+                { id: 'nomePaciente', nome: 'Nome do Paciente' },
+                { id: 'cnsPaciente', nome: 'Cartão Nacional de Saúde (CNS)' },
+                { id: 'dataNascimento', nome: 'Data de Nascimento' },
+                { id: 'sexoPaciente', nome: 'Sexo' },
+                { id: 'nomeMae', nome: 'Nome da Mãe' },
+                { id: 'municipioResidencia', nome: 'Município de Residência' },
+                { id: 'sinaisSintomas', nome: 'Principais Sinais e Sintomas Clínicos' },
+                { id: 'condicoesInternacao', nome: 'Condições que Justificam a Internação' },
+                { id: 'principaisResultados', nome: 'Principais Resultados de Provas Diagnósticas' },
+                { id: 'diagnosticoInicial', nome: 'Diagnóstico Inicial' },
+                { id: 'buscaCidPrincipal', nome: 'CID 10 Principal' },
+                { id: 'descricaoProcedimento', nome: 'Descrição do Procedimento Solicitado' },
+                { id: 'buscaCodigoProcedimento', nome: 'Código do Procedimento (SIGTAP)' },
+                { id: 'clinica', nome: 'Clínica' },
+                { id: 'caraterInternacao', nome: 'Caráter da Internação' },
+                { id: 'numeroDocProfissional', nome: 'Nº Documento do Profissional' },
+                { id: 'nomeProfissional', nome: 'Nome do Profissional Solicitante' },
+                { id: 'dataSolicitacao', nome: 'Data da Solicitação' }
+            ];
+
+            for (const item of obrigatorios) {
+                const el = document.getElementById(item.id);
+                if (!el.value.trim()) {
+                    erro(item.id, `Preenchimento obrigatório: "${item.nome}".`);
+                    return;
+                }
+            }
+
+            // CNS do Paciente: 15 dígitos
+            const cnsPac = document.getElementById('cnsPaciente').value.trim();
+            if (cnsPac.length !== 15) {
+                erro('cnsPaciente', 'O CNS do paciente deve conter exatamente 15 dígitos.');
+                return;
+            }
+
+            // Documento Profissional (CNS = 15, CPF = 11)
+            const tipoDoc = document.getElementById('tipoDocumentoProfissional').value;
+            const numDoc = document.getElementById('numeroDocProfissional').value.trim();
+            if (tipoDoc === 'CNS' && numDoc.length !== 15) {
+                erro('numeroDocProfissional', 'O CNS do profissional deve conter exatamente 15 dígitos.');
+                return;
+            } else if (tipoDoc === 'CPF' && numDoc.length !== 11) {
+                erro('numeroDocProfissional', 'O CPF do profissional deve conter exatamente 11 dígitos.');
+                return;
+            }
+
+            // Código do Procedimento: 10 dígitos puros
+            let codProc = document.getElementById('codigoProcedimento').value.trim();
+            if (!codProc) {
+                codProc = document.getElementById('buscaCodigoProcedimento').value.replace(/\D/g, '');
+            }
+            if (codProc.length !== 10) {
+                erro('buscaCodigoProcedimento', 'O Código SIGTAP deve conter 10 dígitos (iniciados com 03 ou 04).');
+                return;
+            }
+
+            // Salva os dados na memória do navegador
+            salvarMemoria();
+
+            try {
+                let pdfDoc;
+                if (typeof PDF_BASE_BASE64 !== 'undefined' && PDF_BASE_BASE64.length > 100) {
+                    // Carrega diretamente da base local offline (sem travas de rede ou navegador)
+                    pdfDoc = await PDFLib.PDFDocument.load(PDF_BASE_BASE64);
+                } else {
+                    const pdfBytes = await fetch('aih_base.pdf').then(res => res.arrayBuffer());
+                    pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
+                }
+                const page = pdfDoc.getPages()[0];
+                const fonte = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
+
+                // 1. Estabelecimento
+                page.drawText(document.getElementById('nomeEstabelecimento').value, {
+                    x: mapaAih.nomeEstabelecimento.x,
+                    y: mapaAih.nomeEstabelecimento.y,
+                    size: mapaAih.nomeEstabelecimento.tamanho
+                });
+                imprimirTextoEspacado(document.getElementById('cnesEstabelecimento').value, mapaAih.cnesEstabelecimento, page);
+
+                // 2. Paciente
+                page.drawText(document.getElementById('nomePaciente').value, {
+                    x: mapaAih.nome.x,
+                    y: mapaAih.nome.y,
+                    size: mapaAih.nome.tamanho
+                });
+                imprimirTextoEspacado(cnsPac, mapaAih.cns, page);
+
+                const dataNasc = document.getElementById('dataNascimento').value;
+                if (dataNasc) {
+                    const [ano, mes, dia] = dataNasc.split('-');
+                    page.drawText(`${dia}/${mes}/${ano}`, {
+                        x: mapaAih.dataNasc.x,
+                        y: mapaAih.dataNasc.y,
+                        size: mapaAih.dataNasc.tamanho
+                    });
+                }
+
+                const sexo = document.getElementById('sexoPaciente').value;
+                if (sexo === 'M') {
+                    page.drawText('X', { x: mapaAih.sexoMasc.x, y: mapaAih.sexoMasc.y, size: mapaAih.sexoMasc.tamanho });
+                } else if (sexo === 'F') {
+                    page.drawText('X', { x: mapaAih.sexoFem.x, y: mapaAih.sexoFem.y, size: mapaAih.sexoFem.tamanho });
+                }
+
+                page.drawText(document.getElementById('nomeMae').value, { x: mapaAih.nomeMae.x, y: mapaAih.nomeMae.y, size: mapaAih.nomeMae.tamanho });
+                page.drawText(document.getElementById('nomeResponsavel').value, { x: mapaAih.nomeResponsavel.x, y: mapaAih.nomeResponsavel.y, size: mapaAih.nomeResponsavel.tamanho });
+                page.drawText(document.getElementById('endereco').value, { x: mapaAih.endereco.x, y: mapaAih.endereco.y, size: mapaAih.endereco.tamanho });
+                imprimirTextoEspacado(document.getElementById('uf').value, mapaAih.uf, page);
+                imprimirTextoEspacado(document.getElementById('cep').value, mapaAih.cep, page);
+                page.drawText(document.getElementById('municipioResidencia').value, { x: mapaAih.municipioResidencia.x, y: mapaAih.municipioResidencia.y, size: mapaAih.municipioResidencia.tamanho });
+
+                // 3. Justificativa Clínica
+                const cleanTxt = id => document.getElementById(id).value.replace(/[\r\n]+/g, ' ').trim();
+                page.drawText(cleanTxt('sinaisSintomas'), {
+                    x: mapaAih.sinaisSintomas.x,
+                    y: mapaAih.sinaisSintomas.y,
+                    size: mapaAih.sinaisSintomas.tamanho,
+                    maxWidth: mapaAih.sinaisSintomas.larguraMaxima,
+                    lineHeight: mapaAih.sinaisSintomas.alturaLinha,
+                    font: fonte,
+                    wordBreaks: [' ', '-']
+                });
+
+                page.drawText(cleanTxt('condicoesInternacao'), {
+                    x: mapaAih.condicoesInternacao.x,
+                    y: mapaAih.condicoesInternacao.y,
+                    size: mapaAih.condicoesInternacao.tamanho,
+                    maxWidth: mapaAih.condicoesInternacao.larguraMaxima,
+                    lineHeight: mapaAih.condicoesInternacao.alturaLinha,
+                    font: fonte,
+                    wordBreaks: [' ', '-']
+                });
+
+                page.drawText(cleanTxt('principaisResultados'), {
+                    x: mapaAih.principaisResultados.x,
+                    y: mapaAih.principaisResultados.y,
+                    size: mapaAih.principaisResultados.tamanho,
+                    maxWidth: mapaAih.principaisResultados.larguraMaxima,
+                    lineHeight: mapaAih.principaisResultados.alturaLinha,
+                    font: fonte,
+                    wordBreaks: [' ', '-']
+                });
+
+                page.drawText(document.getElementById('diagnosticoInicial').value, {
+                    x: mapaAih.diagnosticoInicial.x,
+                    y: mapaAih.diagnosticoInicial.y,
+                    size: mapaAih.diagnosticoInicial.tamanho
+                });
+
+                imprimirTextoEspacado(document.getElementById('buscaCidPrincipal').value, mapaAih.cidPrincipal, page);
+                imprimirTextoEspacado(document.getElementById('cidSecundario').value, mapaAih.cidSecundario, page);
+                imprimirTextoEspacado(document.getElementById('cidCausasAssociadas').value, mapaAih.cidCausasAssociadas, page);
+
+                // 4. Procedimento Solicitado
+                page.drawText(document.getElementById('descricaoProcedimento').value, {
+                    x: mapaAih.descricaoProcedimento.x,
+                    y: mapaAih.descricaoProcedimento.y,
+                    size: mapaAih.descricaoProcedimento.tamanho
+                });
+
+                imprimirTextoEspacado(codProc, mapaAih.codigoProcedimento, page);
+                page.drawText(document.getElementById('clinica').value, { x: mapaAih.clinica.x, y: mapaAih.clinica.y, size: mapaAih.clinica.tamanho });
+
+                const carater = document.getElementById('caraterInternacao').value;
+                if (carater) {
+                    page.drawText(carater.toUpperCase(), { x: mapaAih.caraterInternacao.x, y: mapaAih.caraterInternacao.y, size: mapaAih.caraterInternacao.tamanho });
+                }
+
+                // 5. Profissional Solicitante
+                if (tipoDoc === 'CNS') {
+                    page.drawText('X', { x: mapaAih.docProfissionalCns.x, y: mapaAih.docProfissionalCns.y, size: mapaAih.docProfissionalCns.tamanho });
+                } else {
+                    page.drawText('X', { x: mapaAih.docProfissionalCpf.x, y: mapaAih.docProfissionalCpf.y, size: mapaAih.docProfissionalCpf.tamanho });
+                }
+                imprimirTextoEspacado(numDoc, mapaAih.numeroDocProfissional, page);
+
+                page.drawText(document.getElementById('nomeProfissional').value, {
+                    x: mapaAih.nomeProfissional.x,
+                    y: mapaAih.nomeProfissional.y,
+                    size: mapaAih.nomeProfissional.tamanho
+                });
+
+                const dataSol = document.getElementById('dataSolicitacao').value;
+                if (dataSol) {
+                    const [ano, mes, dia] = dataSol.split('-');
+                    page.drawText(`${dia}/${mes}/${ano}`, {
+                        x: mapaAih.dataSolicitacao.x,
+                        y: mapaAih.dataSolicitacao.y,
+                        size: mapaAih.dataSolicitacao.tamanho
+                    });
+                }
+
+                // Salva o PDF da AIH e faz o download ou abre para impressão
+                const finalBytes = await pdfDoc.save();
+                const blob = new Blob([finalBytes], { type: "application/pdf" });
+                const nomeLimpo = (document.getElementById('nomePaciente').value.replace(/\s+/g, '_') || 'Preenchida');
+
+                // Salva no histórico local de laudos emitidos
+                salvarNoHistoricoLaudos('AIH');
+
+                if (modo === 'imprimir') {
+                    const blobUrl = URL.createObjectURL(blob);
+                    const win = window.open(blobUrl, '_blank');
+                    if (!win) {
+                        const link = document.createElement('a');
+                        link.href = blobUrl;
+                        link.download = `AIH_${nomeLimpo}.pdf`;
+                        link.click();
+                    }
+                } else {
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(blob);
+                    link.download = `AIH_${nomeLimpo}.pdf`;
+                    link.click();
+                }
+
+            } catch (err) {
+                console.error(err);
+                alert("Erro ao gerar o documento PDF. Verifique se o arquivo 'aih_base.pdf' está na mesma pasta.");
+            }
+        }
+
+        // --- GERAÇÃO DO PDF DA APAC (ALTA COMPLEXIDADE & EXAMES) ---
+        async function gerarApacPdf(modo = 'download') {
+            const divErro = document.getElementById('mensagemErro');
+            divErro.style.display = 'none';
+
+            function erro(elemId, msg) {
+                const el = document.getElementById(elemId);
+                divErro.innerText = msg;
+                divErro.style.display = 'block';
+                if (el) {
+                    el.classList.add('campo-invalido');
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    el.focus();
+                }
+            }
+
+            // Limpa marcações de erro anteriores
+            document.querySelectorAll('.campo-invalido').forEach(el => el.classList.remove('campo-invalido'));
+
+            // Validações obrigatórias da APAC
+            const obrigatorios = [
+                { id: 'nomeEstabelecimento', nome: 'Nome do Estabelecimento Solicitante' },
+                { id: 'nomePaciente', nome: 'Nome do Paciente' },
+                { id: 'cnsPaciente', nome: 'Cartão Nacional de Saúde (CNS)' },
+                { id: 'dataNascimento', nome: 'Data de Nascimento' },
+                { id: 'sexoPaciente', nome: 'Sexo' },
+                { id: 'nomeMae', nome: 'Nome da Mãe' },
+                { id: 'municipioResidencia', nome: 'Município de Residência' },
+                { id: 'descricaoProcedimentoApac', nome: 'Descrição do Procedimento Principal' },
+                { id: 'buscaCodigoProcedimentoApac', nome: 'Código do Procedimento (SIGTAP)' },
+                { id: 'qtdeProcedimentoApac', nome: 'Quantidade do Procedimento Principal' },
+                { id: 'descricaoDiagnosticoApac', nome: 'Descrição Clínica Resumida do Quadro' },
+                { id: 'observacoesApac', nome: 'Observações e Informações Complementares' },
+                { id: 'buscaCidPrincipalApac', nome: 'CID-10 Principal' },
+                { id: 'numeroDocProfissional', nome: 'Nº Documento do Profissional' },
+                { id: 'nomeProfissional', nome: 'Nome do Profissional Solicitante' },
+                { id: 'dataSolicitacao', nome: 'Data da Solicitação' }
+            ];
+
+            for (const item of obrigatorios) {
+                const el = document.getElementById(item.id);
+                if (!el || !el.value.trim()) {
+                    erro(item.id, `Preenchimento obrigatório: "${item.nome}".`);
+                    return;
+                }
+            }
+
+            // CNS do Paciente: 15 dígitos
+            const cnsPac = document.getElementById('cnsPaciente').value.trim();
+            if (cnsPac.length !== 15) {
+                erro('cnsPaciente', 'O CNS do paciente deve conter exatamente 15 dígitos.');
+                return;
+            }
+
+            // Documento Profissional (CNS = 15, CPF = 11)
+            const tipoDoc = document.getElementById('tipoDocumentoProfissional').value;
+            const numDoc = document.getElementById('numeroDocProfissional').value.trim();
+            if (tipoDoc === 'CNS' && numDoc.length !== 15) {
+                erro('numeroDocProfissional', 'O CNS do profissional deve conter exatamente 15 dígitos.');
+                return;
+            } else if (tipoDoc === 'CPF' && numDoc.length !== 11) {
+                erro('numeroDocProfissional', 'O CPF do profissional deve conter exatamente 11 dígitos.');
+                return;
+            }
+
+            // CNES do Estabelecimento (se preenchido, deve ter 7 dígitos)
+            const cnesVal = document.getElementById('cnesEstabelecimento').value.trim();
+            if (cnesVal && cnesVal.length !== 7) {
+                erro('cnesEstabelecimento', 'O CNES do estabelecimento deve conter exatamente 7 dígitos.');
+                return;
+            }
+
+            // Código do Procedimento Principal: 10 dígitos puros
+            let codProc = document.getElementById('codigoProcedimentoApac').value.trim();
+            if (!codProc) {
+                codProc = document.getElementById('buscaCodigoProcedimentoApac').value.replace(/\D/g, '');
+            }
+            if (codProc.length !== 10) {
+                erro('buscaCodigoProcedimentoApac', 'O Código SIGTAP do procedimento principal deve conter 10 dígitos.');
+                return;
+            }
+
+            // Coleta e validação de procedimentos secundários (se houver)
+            const arrayProcedimentosSecundarios = [];
+            for (let i = 1; i <= contadorProcSecApac; i++) {
+                const elBloco = document.getElementById(`blocoProcSecApac${i}`);
+                if (!elBloco) continue;
+                const descEl = document.getElementById(`descProcSec${i}`);
+                const codVisEl = document.getElementById(`buscaCodProcSec${i}`);
+                const codEscEl = document.getElementById(`codProcSec${i}`);
+                const qtdeEl = document.getElementById(`qtdeProcSec${i}`);
+                
+                const desc = descEl ? descEl.value.trim() : '';
+                let cod = codEscEl && codEscEl.value.trim() ? codEscEl.value.trim() : (codVisEl ? codVisEl.value.replace(/\D/g, '') : '');
+                const qtde = qtdeEl && qtdeEl.value ? qtdeEl.value : '1';
+
+                if (!desc) {
+                    erro(`descProcSec${i}`, `Preenchimento obrigatório da descrição do Procedimento Secundário #${i}.`);
+                    return;
+                }
+                if (cod.length !== 10) {
+                    erro(`buscaCodProcSec${i}`, `O Procedimento Secundário #${i} deve conter um código SIGTAP de 10 dígitos válido.`);
+                    return;
+                }
+
+                arrayProcedimentosSecundarios.push({
+                    codigo: cod,
+                    descricao: desc,
+                    qtde: qtde
+                });
+            }
+
+            // Salva os dados na memória do navegador
+            salvarMemoria();
+
+            try {
+                let pdfDoc;
+                if (typeof PDF_BASE_APAC !== 'undefined' && PDF_BASE_APAC.length > 100) {
+                    // Carrega diretamente da base local offline (sem travas de rede ou navegador)
+                    pdfDoc = await PDFLib.PDFDocument.load(PDF_BASE_APAC);
+                } else {
+                    const pdfBytes = await fetch('apac_base.pdf').then(res => res.arrayBuffer());
+                    pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
+                }
+                const page = pdfDoc.getPages()[0];
+                const fonte = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
+
+                // 1. Estabelecimento
+                page.drawText(document.getElementById('nomeEstabelecimento').value, {
+                    x: mapaApac.nomeEstabelecimento.x,
+                    y: mapaApac.nomeEstabelecimento.y,
+                    size: mapaApac.nomeEstabelecimento.tamanho
+                });
+                imprimirTextoEspacado(document.getElementById('cnesEstabelecimento').value, mapaApac.cnesEstabelecimento, page);
+
+                // 2. Paciente
+                page.drawText(document.getElementById('nomePaciente').value, {
+                    x: mapaApac.nomePaciente.x,
+                    y: mapaApac.nomePaciente.y,
+                    size: mapaApac.nomePaciente.tamanho
+                });
+                imprimirTextoEspacado(cnsPac, mapaApac.cnsPaciente, page);
+
+                const dataNasc = document.getElementById('dataNascimento').value;
+                if (dataNasc) {
+                    const [ano, mes, dia] = dataNasc.split('-');
+                    page.drawText(`${dia}/${mes}/${ano}`, {
+                        x: mapaApac.dataNascimento.x,
+                        y: mapaApac.dataNascimento.y,
+                        size: mapaApac.dataNascimento.tamanho
+                    });
+                }
+
+                const sexo = document.getElementById('sexoPaciente').value;
+                if (sexo === 'M') {
+                    page.drawText('X', { x: mapaApac.sexoMasc.x, y: mapaApac.sexoMasc.y, size: mapaApac.sexoMasc.tamanho });
+                } else if (sexo === 'F') {
+                    page.drawText('X', { x: mapaApac.sexoFem.x, y: mapaApac.sexoFem.y, size: mapaApac.sexoFem.tamanho });
+                }
+
+                page.drawText(document.getElementById('nomeMae').value, { x: mapaApac.nomeMae.x, y: mapaApac.nomeMae.y, size: mapaApac.nomeMae.tamanho });
+                page.drawText(document.getElementById('nomeResponsavel').value, { x: mapaApac.nomeResponsavel.x, y: mapaApac.nomeResponsavel.y, size: mapaApac.nomeResponsavel.tamanho });
+                page.drawText(document.getElementById('endereco').value, { x: mapaApac.endereco.x, y: mapaApac.endereco.y, size: mapaApac.endereco.tamanho });
+                imprimirTextoEspacado(document.getElementById('uf').value, mapaApac.uf, page);
+                imprimirTextoEspacado(document.getElementById('cep').value, mapaApac.cep, page);
+                page.drawText(document.getElementById('municipioResidencia').value, { x: mapaApac.municipioResidencia.x, y: mapaApac.municipioResidencia.y, size: mapaApac.municipioResidencia.tamanho });
+
+                // 3. Procedimento Principal
+                page.drawText(document.getElementById('descricaoProcedimentoApac').value, {
+                    x: mapaApac.descricaoProcedimento.x,
+                    y: mapaApac.descricaoProcedimento.y,
+                    size: mapaApac.descricaoProcedimento.tamanho
+                });
+                imprimirTextoEspacado(codProc, mapaApac.codigoProcedimento, page);
+
+                const qtdePrincipal = document.getElementById('qtdeProcedimentoApac').value || '1';
+                page.drawText(String(qtdePrincipal), {
+                    x: mapaApac.qtdeProcedimento.x,
+                    y: mapaApac.qtdeProcedimento.y,
+                    size: mapaApac.qtdeProcedimento.tamanho
+                });
+
+                // 4. Procedimentos Secundários Dinâmicos
+                arrayProcedimentosSecundarios.forEach((proc, index) => {
+                    const linhaYAtual = (mapaApac.codigoProcedimento.y - mapaApac.procSecundario.distanciaDoPrincipal) - (index * mapaApac.procSecundario.espacamentoY);
+                    page.drawText(proc.descricao, {
+                        x: mapaApac.procSecundario.xDescricao,
+                        y: linhaYAtual,
+                        size: mapaApac.procSecundario.tamanhoDesc
+                    });
+                    page.drawText(String(proc.qtde), {
+                        x: mapaApac.procSecundario.xQtde,
+                        y: linhaYAtual,
+                        size: mapaApac.procSecundario.tamanhoQtde
+                    });
+                    imprimirTextoEspacado(proc.codigo, {
+                        x: mapaApac.procSecundario.xCodigo,
+                        y: linhaYAtual,
+                        tamanho: mapaApac.procSecundario.tamanhoCod,
+                        espacamento: mapaApac.procSecundario.espacamentoLetrasCod
+                    }, page);
+                });
+
+                // 5. Justificativa Clínica e Diagnóstico
+                const cleanTxt = id => {
+                    const el = document.getElementById(id);
+                    return el ? el.value.replace(/[\r\n]+/g, ' ').trim() : '';
+                };
+
+                page.drawText(cleanTxt('descricaoDiagnosticoApac'), {
+                    x: mapaApac.descricaoDiagnostico.x,
+                    y: mapaApac.descricaoDiagnostico.y,
+                    size: mapaApac.descricaoDiagnostico.tamanho,
+                    maxWidth: mapaApac.descricaoDiagnostico.larguraMaxima,
+                    lineHeight: mapaApac.descricaoDiagnostico.alturaLinha,
+                    font: fonte,
+                    wordBreaks: [' ', '-']
+                });
+
+                page.drawText(cleanTxt('observacoesApac'), {
+                    x: mapaApac.observacoesApac.x,
+                    y: mapaApac.observacoesApac.y,
+                    size: mapaApac.observacoesApac.tamanho,
+                    maxWidth: mapaApac.observacoesApac.larguraMaxima,
+                    lineHeight: mapaApac.observacoesApac.alturaLinha,
+                    font: fonte,
+                    wordBreaks: [' ', '-']
+                });
+
+                imprimirTextoEspacado(document.getElementById('buscaCidPrincipalApac').value, mapaApac.cidPrincipal, page);
+                imprimirTextoEspacado(document.getElementById('cidSecundarioApac').value, mapaApac.cidSecundario, page);
+                imprimirTextoEspacado(document.getElementById('cidCausasAssociadasApac').value, mapaApac.cidCausasAssociadas, page);
+
+                // 6. Profissional Solicitante
+                if (tipoDoc === 'CNS') {
+                    page.drawText('X', { x: mapaApac.docCNS.x, y: mapaApac.docCNS.y, size: mapaApac.docCNS.tamanho });
+                } else {
+                    page.drawText('X', { x: mapaApac.docCPF.x, y: mapaApac.docCPF.y, size: mapaApac.docCPF.tamanho });
+                }
+                imprimirTextoEspacado(numDoc, mapaApac.numeroDocProfissional, page);
+
+                page.drawText(document.getElementById('nomeProfissional').value, {
+                    x: mapaApac.nomeProfissional.x,
+                    y: mapaApac.nomeProfissional.y,
+                    size: mapaApac.nomeProfissional.tamanho
+                });
+
+                const dataSol = document.getElementById('dataSolicitacao').value;
+                if (dataSol) {
+                    const [ano, mes, dia] = dataSol.split('-');
+                    page.drawText(`${dia}/${mes}/${ano}`, {
+                        x: mapaApac.dataSolicitacao.x,
+                        y: mapaApac.dataSolicitacao.y,
+                        size: mapaApac.dataSolicitacao.tamanho
+                    });
+                }
+
+                // Salva o PDF da APAC e faz o download ou abre para impressão
+                const finalBytes = await pdfDoc.save();
+                const blob = new Blob([finalBytes], { type: "application/pdf" });
+                const nomeLimpo = (document.getElementById('nomePaciente').value.replace(/\s+/g, '_') || 'Preenchida');
+
+                // Salva no histórico local de laudos emitidos
+                salvarNoHistoricoLaudos('APAC');
+
+                if (modo === 'imprimir') {
+                    const blobUrl = URL.createObjectURL(blob);
+                    const win = window.open(blobUrl, '_blank');
+                    if (!win) {
+                        const link = document.createElement('a');
+                        link.href = blobUrl;
+                        link.download = `APAC_${nomeLimpo}.pdf`;
+                        link.click();
+                    }
+                } else {
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(blob);
+                    link.download = `APAC_${nomeLimpo}.pdf`;
+                    link.click();
+                }
+
+            } catch (err) {
+                console.error(err);
+                alert("Erro ao gerar o documento da APAC em PDF. Verifique se o arquivo 'apac_base.pdf' ou a base local está acessível.");
+            }
+        }
+
+        // --- INICIALIZAÇÃO DA PÁGINA ---
+        window.addEventListener('DOMContentLoaded', () => {
+            // Data atual automática
+            const hoje = new Date();
+            const ano = hoje.getFullYear();
+            const mes = String(hoje.getMonth() + 1).padStart(2, '0');
+            const dia = String(hoje.getDate()).padStart(2, '0');
+            document.getElementById('dataSolicitacao').value = `${ano}-${mes}-${dia}`;
+
+            // Carrega dados e memórias salvas
+            carregarMemoria();
+            carregarDados();
+            iniciarAutocompleteCid();
+            iniciarAutocompleteProcedimentos();
+            iniciarAutocompleteCidApac();
+            iniciarAutocompleteProcedimentosApac();
+
+            // Monitoramento em tempo real do Auditor Anti-Glosa
+            ['sexoPaciente', 'dataNascimento', 'descricaoProcedimento', 'buscaCodigoProcedimento', 'descricaoProcedimentoApac', 'buscaCodigoProcedimentoApac', 'buscaCidPrincipal', 'buscaCidPrincipalApac', 'diagnosticoInicial', 'diagnosticoInicialApac'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.addEventListener('input', verificarIncompatibilidadeGlosa);
+                    el.addEventListener('change', verificarIncompatibilidadeGlosa);
+                }
+            });
+
+            // Verifica se a URL solicita abrir direto na aba APAC (ex: index.html#apac ou index.html?aba=apac)
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('aba') === 'apac' || window.location.hash === '#apac') {
+                alternarAba('apac');
+            } else {
+                // Já abre o QualCID com o exemplo ativo para o usuário ver imediatamente na tela!
+                setTimeout(() => {
+                    aplicarExemplo('insuficiencia cardiaca');
+                }, 100);
+            }
+        });
+    </script>
+</body>
+</html>

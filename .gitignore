@@ -1,0 +1,29 @@
+# Arquivos locais de rascunho e testes
+scratch/
+backup_estavel/
+
+# Variáveis de ambiente e credenciais
+.env
+.env.*
+*.pem
+*.key
+*.token
+credentials*
+secrets*
+
+# Logs e dependências de ambiente
+*.log
+node_modules/
+
+# Arquivos brutos de extração/desenvolvimento (já compilados em base_dados.js)
+*.json
+aih_raw.html
+apac_raw.html
+qualcid_cid.js
+qualcid_i50.html
+qualcid_search.html
+
+# Arquivos do sistema operacional
+Thumbs.db
+.DS_Store
+desktop.ini
